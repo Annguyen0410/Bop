@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'" />
+    <title>Bop</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">☺</div>
+          <div class="brand-name">bop</div>
+          <div class="brand-sub" id="brand-sub"></div>
+        </div>
+
+        <nav class="nav" id="nav" aria-label="Sections">
+          <button data-page="spaces" aria-current="true">Spaces</button>
+          <button data-page="alerts">Alerts</button>
+          <button data-page="settings">Settings</button>
+          <button data-page="guide">Guide</button>
+        </nav>
+
+        <div class="sidebar-actions">
+          <button class="primary" id="new-space" style="flex: 1">＋ New space</button>
+          <button class="ghost" id="close-space" title="Leave the open space" hidden>✕</button>
+        </div>
+
+        <div class="sidebar-scroll" id="space-list"></div>
+      </aside>
+
+      <main class="main" id="main"></main>
+    </div>
+
+    <div id="modal-root"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

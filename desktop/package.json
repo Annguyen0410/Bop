@@ -1,0 +1,64 @@
+{
+  "name": "bop-desktop",
+  "productName": "Bop",
+  "version": "0.1.9",
+  "description": "Bop for desktop: many messaging accounts, one quiet hub. Separate browser session per space.",
+  "author": "Bop",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "smoke": "electron . --bop-smoke",
+    "smoke:unread": "electron src/main/reader-smoke.js",
+    "smoke:live": "node tools/live-check.js",
+    "smoke:live:exe": "node tools/live-check.js --app dist/Bop-0.1.9-portable.exe",
+    "dist": "electron-builder --win --x64",
+    "dist:portable": "electron-builder --win portable --x64"
+  },
+  "build": {
+    "appId": "com.bop.desktop",
+    "productName": "Bop",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/bop.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "Bop-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Bop",
+      "artifactName": "Bop-${version}-setup.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.15.3",
+    "jsdom": "^29.1.1"
+  }
+}

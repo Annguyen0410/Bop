@@ -1,0 +1,34 @@
+<!doctype html>
+<!--
+  A local stand-in for a signed-in chat page. It exists so the DOM reader in
+  app/src/main/assets/unread-reader.js can be verified on purpose — including the case no real site can
+  be asked to demonstrate on demand: a message arriving in a thread the user muted.
+
+  The markup is deliberately plain and stable; the descriptor used by the test describes exactly it.
+  Nothing here is a claim about any real service's markup.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>(4) Bop fixture · Messages</title>
+</head>
+<body>
+  <main id="threads" class="thread-list">
+    <!-- Three unread from someone the user is watching for. -->
+    <div class="thread" id="thread-ana">
+      <span class="name">Ana</span>
+      <span class="badge">3</span>
+    </div>
+    <!-- Two unread inside a thread the user muted on the website: they must not raise a card. -->
+    <div class="thread is-muted" id="thread-promo">
+      <span class="name">Promo bot</span>
+      <span class="badge">2</span>
+      <span class="muted-mark" aria-label="Muted">muted</span>
+    </div>
+    <!-- A read thread carries no badge at all. -->
+    <div class="thread" id="thread-read">
+      <span class="name">Old friend</span>
+    </div>
+  </main>
+</body>
+</html>

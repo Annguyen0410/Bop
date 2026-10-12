@@ -1,0 +1,109 @@
+/* The bubble.
+   Its own file, not a <style> block inside bubble.html: that page's content policy allows only
+   'self' styles, and a rule the policy drops is a rule that silently does nothing — which is exactly
+   what happened to the space menu's layout on 0.1.6, where the whole inline block was refused. */
+
+:root {
+  --brand: #7862bc;
+  --brand-lift: #a48fe0;
+  --brand-deep: #5b478f;
+  --lime: #d8f875;
+  --ink: #211b38;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The whole disc is the grab surface, and a press that never travels is a click on the button in the
+   middle. Both are decided in bubble.js; the cursor is what tells the user which one they are about to
+   do. */
+.bubble {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 26%, var(--brand-lift), var(--brand) 58%, var(--brand-deep) 100%);
+  box-shadow: 0 7px 20px rgba(20, 17, 32, 0.42), inset 0 0 0 2px rgba(255, 255, 255, 0.24);
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.bubble.dragging {
+  cursor: grabbing;
+  transform: scale(1.05);
+  box-shadow: 0 16px 34px rgba(20, 17, 32, 0.5), inset 0 0 0 2px rgba(255, 255, 255, 0.34);
+}
+
+/* A soft highlight, so the circle reads as a sphere instead of a flat disc. */
+.glow {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 18%, rgba(255, 255, 255, 0.42), transparent 46%);
+  pointer-events: none;
+}
+
+.core {
+  width: 66%;
+  height: 66%;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(158deg, #ffffff, #ece6fb);
+  color: var(--brand);
+  display: grid;
+  place-items: center;
+  cursor: inherit;
+  box-shadow: inset 0 -2px 6px rgba(91, 71, 143, 0.24);
+}
+
+/* The face Bop wears until the user picks a picture: a smile drawn as a vector so it stays crisp at
+   every bubble size the app offers. */
+.mark {
+  width: 76%;
+  height: 76%;
+  display: block;
+}
+.mark circle { fill: currentColor; }
+.mark path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.7;
+  stroke-linecap: round;
+}
+.mark[hidden] { display: none; }
+
+.picture {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* `[hidden]` alone is not enough: the rule above sets `display` on the same element, and a class beats
+   the user agent's `display: none`. */
+.picture[hidden] { display: none; }
+
+.badge {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  font: 800 11px/21px 'Segoe UI', system-ui, sans-serif;
+  text-align: center;
+  box-shadow: 0 1px 5px rgba(20, 17, 32, 0.45), 0 0 0 2px rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+.badge[hidden] { display: none; }

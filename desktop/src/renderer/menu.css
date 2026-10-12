@@ -1,0 +1,55 @@
+/* The space menu that opens from the bubble.
+   It lives in a file, not in a <style> block inside menu.html, because that page's own CSP is
+   `style-src 'self'` — measured on 0.1.6, `document.styleSheets` held only styles.css and every rule of
+   the inline block was dropped, so the panel had no layout at all: a flat list of rows with the footer
+   buttons loose under it, and a raw square window edge. That is the panel the user called ugly.
+   The window is transparent, so the card draws its own rounded corners and shadow; on this Windows build
+   a frameless window gets neither. */
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.panel {
+  height: 100%;
+  margin: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--muted) 24%, transparent);
+  border-radius: 20px;
+  box-shadow: 0 18px 44px rgba(8, 6, 16, 0.45), 0 2px 6px rgba(8, 6, 16, 0.25);
+}
+
+.panel-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 0; }
+.panel-title { font-size: 15px; font-weight: 800; letter-spacing: -0.2px; }
+.panel-count {
+  margin-left: auto; min-width: 22px; text-align: center; border-radius: 999px;
+  background: var(--lilac); color: var(--brand-ink); font-size: 11px; font-weight: 800; padding: 2px 8px;
+}
+[data-theme='dark'] .panel-count { background: color-mix(in srgb, var(--lilac) 26%, transparent); color: var(--text); }
+.panel-sub { font-size: 11px; color: var(--muted); padding: 0 4px 2px; }
+
+.panel-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.panel-list .space-row { padding: 8px 10px; }
+.panel-list .space-row:hover { background: var(--surface-2); }
+.panel-list .space-label { font-size: 13.5px; }
+.panel-list .chevron { flex: none; color: var(--muted); font-size: 15px; font-weight: 700; opacity: 0.7; }
+.panel-list .space-row:hover .chevron { opacity: 1; }
+
+.panel-empty {
+  padding: 18px 12px; text-align: center; color: var(--muted); font-size: 12.5px;
+  background: var(--surface-2); border-radius: var(--radius-sm);
+}
+
+.panel-foot {
+  display: flex; gap: 8px; padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--muted) 18%, transparent);
+}
+.panel-foot button { flex: 1; }
+.panel-foot .hint { flex: 1; align-self: center; color: var(--muted); font-size: 10.5px; }

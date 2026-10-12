@@ -1,0 +1,255 @@
+/* Bop Desktop. The same ink/lilac/lime bento language as the Android build, drawn with plain CSS so
+   the desktop app carries no UI framework and starts instantly. */
+:root {
+  --ink: #211b38;
+  --lilac: #e3d9ff;
+  --lime: #d8f875;
+  --peach: #ffdbca;
+  --brand: #7862bc;
+  --brand-ink: #3a2a66;
+  --bg: #f7f5fa;
+  --surface: #ffffff;
+  --surface-2: #f1edf8;
+  --text: #211b38;
+  --muted: #6c6683;
+  --danger: #b4232f;
+  --ok: #1f7a45;
+  --radius: 22px;
+  --radius-sm: 14px;
+  font-synthesis: none;
+  /* Native chrome follows the chosen theme, not the operating system: without this, Chromium draws a
+     light scrollbar and light form controls inside a dark window. Measured on 0.1.6 in dark theme:
+     `color-scheme` computed to `normal` while `--bg` was #14121c. */
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #14121c;
+  --surface: #1d1a29;
+  --surface-2: #262235;
+  --text: #f3f0fb;
+  --muted: #a49dbd;
+  --ink: #0f0d18;
+  --lilac: #cbbdf7;
+  --danger: #ff8f9a;
+  --ok: #7ee2a8;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 'Segoe UI', system-ui, -apple-system, 'Noto Sans', sans-serif;
+  overflow: hidden;
+}
+
+/* Every control inherits the themed text colour. A button does *not* inherit `color` by default, and
+   that is a theme bug, not a detail: measured on 0.1.6 in dark theme, the app names inside the
+   "A new little space" dialog computed to rgb(0, 0, 0) on a #262235 tile — a contrast ratio of 1.36,
+   which is the black-on-black the user reported. Nothing else about the dialog was wrong. */
+button { font: inherit; cursor: pointer; color: inherit; }
+input, select, textarea { font: inherit; color: inherit; }
+
+.shell { display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+
+/* --- sidebar ----------------------------------------------------------------------------- */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid color-mix(in srgb, var(--muted) 18%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 10px; }
+.brand-mark {
+  width: 38px; height: 38px; border-radius: 13px; background: var(--brand);
+  display: grid; place-items: center; color: #fff; font-size: 20px; font-weight: 800;
+}
+.brand-name { font-size: 25px; font-weight: 900; letter-spacing: -0.6px; }
+.brand-sub { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+.nav { display: flex; gap: 4px; padding: 6px 12px 12px; }
+.nav button {
+  flex: 1; border: 0; background: transparent; color: var(--muted);
+  border-radius: 14px; padding: 8px 4px; font-size: 12px; font-weight: 600;
+}
+.nav button[aria-current='true'] { background: var(--lilac); color: var(--brand-ink); }
+[data-theme='dark'] .nav button[aria-current='true'] { background: color-mix(in srgb, var(--lilac) 26%, transparent); color: var(--text); }
+
+.sidebar-actions { padding: 0 14px 12px; display: flex; gap: 8px; }
+.sidebar-scroll { overflow-y: auto; padding: 0 12px 18px; flex: 1; min-height: 0; }
+
+.group-title {
+  font-size: 10px; letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--muted); font-weight: 700; padding: 12px 8px 6px;
+}
+
+.space-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: 0; background: transparent; text-align: left;
+  padding: 9px 10px; border-radius: var(--radius-sm); color: inherit;
+}
+.space-row:hover { background: var(--surface-2); }
+.space-row[aria-current='true'] { background: var(--brand); color: #fff; }
+.space-dot { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+.space-meta { min-width: 0; flex: 1; }
+.space-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.space-app { font-size: 11px; color: var(--muted); }
+.space-row[aria-current='true'] .space-app { color: #e9e3ff; }
+.badge {
+  flex: none; min-width: 22px; text-align: center; border-radius: 999px;
+  background: var(--peach); color: var(--ink); font-size: 11px; font-weight: 800; padding: 2px 6px;
+}
+.watch-dot { flex: none; font-size: 12px; color: var(--ok); }
+.space-row[aria-current='true'] .watch-dot { color: #eaffc8; }
+
+/* --- main pane --------------------------------------------------------------------------- */
+.main { min-height: 0; overflow-y: auto; padding: 26px 30px 40px; }
+.space-open .main { visibility: hidden; } /* the WebContentsView paints over this area */
+
+.hero {
+  background: var(--ink); color: #fff; border-radius: 32px; padding: 26px;
+}
+[data-theme='dark'] .hero { background: #241f38; }
+.hero .eyebrow { color: var(--lilac); font-size: 10px; letter-spacing: 1.8px; font-weight: 700; }
+.hero h1 { margin: 10px 0 16px; font-size: 34px; line-height: 1.05; font-weight: 800; letter-spacing: -1px; }
+.hero-row { display: flex; align-items: center; gap: 12px; }
+.hero-row .count { color: var(--lilac); font-size: 12px; flex: 1; }
+
+.pill {
+  border: 0; border-radius: 999px; background: var(--lime); color: var(--ink);
+  font-weight: 700; padding: 11px 20px;
+}
+.pill.ghost { background: transparent; color: var(--lilac); border: 1px solid color-mix(in srgb, var(--lilac) 45%, transparent); }
+
+/* `auto-fit`, not `auto-fill`: with `auto-fill` Chromium keeps the empty tracks it reserved, so three
+   spaces sat in the first three of nine narrow columns and the rest of a maximised window was blank —
+   measured on 0.1.7 at 1568px wide, three 210px cards and 900px of nothing. `auto-fit` collapses the
+   tracks nothing landed in, so the cards take the width they are given and grow as the window does. */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 20px; }
+
+.card {
+  background: var(--surface); border-radius: var(--radius); padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--muted) 14%, transparent);
+}
+.card h3 { margin: 0 0 6px; font-size: 15px; }
+.card p { margin: 0; color: var(--muted); font-size: 12.5px; }
+.card-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.card-head { display: flex; align-items: flex-start; gap: 10px; }
+
+.tile { display: flex; flex-direction: column; gap: 6px; }
+.tile .kind {
+  align-self: flex-start; font-size: 10px; font-weight: 800; letter-spacing: 1px;
+  text-transform: uppercase; border-radius: 999px; padding: 3px 9px;
+}
+.tile .kind.social { background: var(--lilac); color: var(--brand-ink); }
+.tile .kind.tasks { background: var(--peach); color: var(--ink); }
+
+.section-title { display: flex; align-items: baseline; gap: 10px; margin: 26px 0 6px; }
+.section-title h2 { margin: 0; font-size: 19px; }
+.section-title span { color: var(--muted); font-size: 12px; }
+
+button.primary {
+  border: 0; background: var(--brand); color: #fff; border-radius: 12px; padding: 9px 14px; font-weight: 600;
+}
+button.ghost {
+  border: 1px solid color-mix(in srgb, var(--muted) 30%, transparent);
+  background: transparent; color: inherit; border-radius: 12px; padding: 8px 13px; font-weight: 600;
+}
+button.danger { border: 0; background: transparent; color: var(--danger); font-weight: 600; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.field { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; }
+.field label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.field input, .field select {
+  background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--muted) 20%, transparent);
+  border-radius: 11px; padding: 9px 11px; outline: none;
+}
+.field input:focus, .field select:focus { border-color: var(--brand); }
+
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--muted) 12%, transparent); }
+.row:last-child { border-bottom: 0; }
+.row .row-text { flex: 1; min-width: 0; }
+.row .row-title { font-weight: 600; }
+.row .row-sub { font-size: 12px; color: var(--muted); }
+.row .row-status { font-size: 12px; font-weight: 700; }
+.row .row-status.ok { color: var(--ok); }
+.row .row-status.bad { color: var(--danger); }
+
+.alert {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--surface); border-radius: var(--radius-sm); padding: 13px 15px; margin-bottom: 10px;
+  border-left: 5px solid var(--brand);
+}
+.alert.unread { background: color-mix(in srgb, var(--lilac) 40%, var(--surface)); }
+[data-theme='dark'] .alert.unread { background: color-mix(in srgb, var(--brand) 26%, var(--surface)); }
+.alert.kind-watch { border-left-color: var(--lime); }
+.alert.kind-error { border-left-color: var(--danger); }
+.alert .when { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.alert .body { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+.empty { color: var(--muted); padding: 22px; text-align: center; background: var(--surface-2); border-radius: var(--radius); }
+
+.note {
+  background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px 14px;
+  color: var(--muted); font-size: 12.5px; margin-top: 12px;
+}
+.note b { color: var(--text); }
+.warn { color: var(--danger); font-weight: 600; }
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(20, 17, 32, 0.55);
+  display: grid; place-items: center; z-index: 40;
+}
+.modal {
+  background: var(--surface); border-radius: var(--radius); padding: 22px; width: min(560px, 90vw);
+  max-height: 82vh; display: flex; flex-direction: column;
+}
+.modal h2 { margin: 0 0 4px; font-size: 20px; }
+.modal .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+/* The edit form is taller than a short window, and measured on 0.1.4 its Save button ended up below the
+   visible area, so a real click at those coordinates landed outside the app entirely. The dialog is now
+   a fixed header and footer with the fields scrolling between them, so the buttons that finish a dialog
+   are always on screen and never cover the last field. */
+.modal > .modal-body { overflow-y: auto; min-height: 0; }
+.modal > .card-actions:last-child {
+  flex: none; margin: 16px 0 0; padding: 12px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--muted) 20%, transparent);
+}
+.app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 12px 0; }
+.app-choice {
+  border: 1px solid color-mix(in srgb, var(--muted) 20%, transparent);
+  background: var(--surface-2); border-radius: 12px; padding: 10px; text-align: left;
+  color: var(--text);
+}
+.app-choice:hover { border-color: color-mix(in srgb, var(--brand) 55%, transparent); }
+.app-choice[aria-pressed='true'] { border-color: var(--brand); background: var(--lilac); color: var(--brand-ink); }
+.app-choice[aria-pressed='true'] .app-kind { color: var(--brand-ink); opacity: 0.75; }
+.app-choice .app-name { font-weight: 600; font-size: 13px; color: inherit; }
+.app-choice .app-kind { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+
+/* The bubble's face in Settings: the picture (or the drawn smile) beside the two controls, so a change
+   is visible where it is made instead of only on the desktop. */
+.bubble-face { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.face-preview {
+  width: 64px; height: 64px; border-radius: 50%; flex: none; overflow: hidden;
+  display: grid; place-items: center;
+  background: radial-gradient(circle at 30% 26%, #a48fe0, #7862bc 58%, #5b478f 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.24), 0 4px 12px rgba(20, 17, 32, 0.25);
+}
+.face-preview img { width: 100%; height: 100%; object-fit: cover; }
+.face-drawn {
+  width: 66%; height: 66%; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(158deg, #ffffff, #ece6fb); color: var(--brand);
+  font-size: 24px; font-weight: 800; line-height: 1;
+}
+.face-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.kv { display: grid; grid-template-columns: 190px 1fr; gap: 4px 12px; font-size: 12.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; word-break: break-all; }
