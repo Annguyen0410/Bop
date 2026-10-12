@@ -1,0 +1,88 @@
+Bop Desktop 0.1.6 — the real panel site, measured before and after
+==================================================================
+
+Reported: "the desktop build is so buggy, now it cannot even load" (packaged 0.1.5, app.usercrowd.com).
+Measured 2026-10-09, Windows 10.0.19045, Chrome/140.0.7339.249 inside Electron 38.8.6.
+
+BEFORE — 0.1.5, a copy of the user's own profile, the pane's own DevTools port
+--------------------------------------------------------------------------------
+$ node tools/cdp-eval.js 9450 "usercrowd" "JSON.stringify({href:location.href,title:document.title,ua:navigator.userAgent,text:...})"
+
+  href  https://app.usercrowd.com/unsupported_browser
+  text  Sorry, you can't use UserCrowd on this version of Electron
+  ua    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)
+        Bop/0.1.5 Chrome/140.0.7339.249 Electron/38.8.6 Safari/537.36
+
+The same pane on the phone layout (Android agent, no Electron token) was served the site's real page:
+
+  href  https://app.usercrowd.com/users/sign_in
+  text  Log in to continue · Email address · Password · Forgot your password? · Remember me · Log in
+  ua    Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko)
+        Chrome/140.0.7339.249 Mobile Safari/537.36
+
+That is the whole difference: one token. Nothing about the machine, the network or the engine.
+
+AFTER — 0.1.6 source build (17:03)
+----------------------------------
+$ ./node_modules/.bin/electron . --remote-debugging-port=9461 --user-data-dir=<temp>
+$ node tools/cdp-eval.js 9461 "renderer/index.html" \
+    "(async () => { const a = await window.bop.addSpace({appId:'custom', kind:'tasks', label:'Panel test',
+      url:'https://app.usercrowd.com/'}); await window.bop.openSpace(a.id); return a; })()"
+  {"ok":true,"id":"C"}
+
+phone layout (the default for a task panel):
+  href  https://app.usercrowd.com/users/sign_in
+  title UserCrowd • Log in
+  ua    Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko)
+        Chrome/140.0.7339.249 Mobile Safari/537.36
+  text  Log in to continue Email address Password Forgot your password? Remember me Log in
+        Don't have a UserCrowd account? Apply now
+
+desktop layout (window.bop.setPhoneLayout('C', false) then reloadSpace):
+  href  https://app.usercrowd.com/users/sign_in
+  title UserCrowd • Log in
+  ua    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)
+        Chrome/140.0.7339.249 Safari/537.36
+  text  Log in to continue Email address Password Forgot your password? Remember me Log in
+        Don't have a UserCrowd account? Apply now
+
+snapshot of that space (no refusal note, because the page is not a refusal page):
+  {"label":"Panel test","monitoring":"observing-auth-unknown","browserNote":null,"openable":true,"phoneLayout":false}
+
+AFTER — the shipped artifact, Bop-0.1.6-portable.exe (17:13)
+------------------------------------------------------------
+$ ./dist/Bop-0.1.6-portable.exe --remote-debugging-port=9463 --user-data-dir=<temp>   (listed as packaged:true)
+
+  href  https://app.usercrowd.com/users/sign_in
+  title UserCrowd
+  ua    Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 ...
+  text  Log in to continue Email address Password Forgot your password? Remember me Log in …
+
+Limits
+------
+- No panel account was signed in: the sign-in page is the proof that the site now serves the pane at all,
+  not the proof of a working logged-in session.
+- Only this one panel was measured (it is the panel the user reported). Other panels may have their own
+  rules; the agent Bop sends is now a truthful Chrome agent, which is the best claim this engine can make.
+- The refusal note was verified with a local fixture (smoke step browser-refusal-note) and unit tests,
+  not with a second real refusal page.
+
+On a copy of the user's real data (17:23)
+-----------------------------------------
+$ cp -r %APPDATA%\Bop <temp>\bop-realcopy      # the real file is bop-settings.bin, encrypted by safeStorage
+$ ./dist/Bop-0.1.6-portable.exe --remote-debugging-port=9464 --user-data-dir=<temp>\bop-realcopy
+
+The app read that profile and reported every space intact, all of them openable:
+  A Account A  social  desktop layout
+  B Account B  social  desktop layout
+  C Watch test tasks   desktop layout, watching on, address saved
+  D Account D  social  desktop layout
+  browserNote: null for all four (no page refused the browser)
+
+Opening the panel space C on that copy, read from its own DevTools target:
+  UserCrowd • Log in | https://app.usercrowd.com/users/sign_in
+  Messenger | https://www.messenger.com/   (spaces A, B and D)
+
+So the spaces and cookies the user already has keep working under 0.1.6, and the panel they reported
+broken now answers with its sign-in page. Nothing was signed in, and the user's own profile was not
+written to: this ran on a copy.

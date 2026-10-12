@@ -1,0 +1,94 @@
+# Desktop 0.1.4 — packed smoke, live check, hashes
+
+Captured on the user's Windows machine (1920x1080, one display) on 9 October 2026.
+
+## Artifact
+
+```
+npx electron-builder --win portable --x64        # exit 0, Windows x64
+dist/Bop-0.1.4-portable.exe  85191512 bytes
+sha256  762b9858cff386892d7c26505fb5247e396aa0ef20cc9b912179306ce0f56fa8
+Desktop copy (the one the user runs)  85191512 bytes
+sha256  762b9858cff386892d7c26505fb5247e396aa0ef20cc9b912179306ce0f56fa8
+same file: true
+```
+
+## Packaged smoke — the EXE run with `--bop-smoke`, its own isolated profile
+
+```
+ok=true  steps=30  alerts=4  failed=0
+  packaged-files: {"packaged":true,"iconEmpty":false,"icon":{"width":64,"height":64},"missingFiles":[]}
+  defaults: {"bubble":true,"startAtLogin":true,"keepPagesAlive":true,"installedPlan":{"path":"C:/app/Bop.exe","args":["--bop-autostart"]},"portablePlan":{"path":"C:/Users/me/OneDrive/Desktop/Bop-portable.exe","args":["--bop-autostart"]},"devPlan":null}
+  tray: {"tray":true,"packaged":true}
+  autostart: {"wanted":true,"supported":true,"registered":false,"portable":true,"error":null,"executable":"app"}
+  watcher: {"baseline":[{"id":"C","alert":false,"failures":0}],"quiet":[{"id":"C","alert":false,"failures":0}],"afterChange":[{"id":"C","alert":true,"failures":0}]}
+  web-notification: ["Watch test · New study"]
+  pane-visibility: {"pane":{"state":"hidden","hidden":true,"focus":true},"ticksIn1200ms":12,"dashboard":{"state":"visible","hidden":false},"keepPagesAlive":true}
+  open-pane-visible: {"state":"visible"}
+  bubble-release-dock: spot=1856,400 right-edge=1920/1920
+  settings-ui: {"missing":[]}
+  reminder-card: {"text":"NEW MESSAGE ALERT Account A · Same chat Second message Open Account A +6 more ×","card":{"x":1566,"y":686,"width":336,"height":128},"bubble":{"x":1856,"y":832,"width":64,"height":64},"onScreen":true,"clearOfBubble":true}
+```
+
+The registry was read before and after this run and was unchanged: a smoke run never writes a
+start-up entry, which is what the `autostart` step asserts.
+
+## Live check — the same EXE started as a normal app, driven over the DevTools protocol
+
+```
+node tools/live-check.js --app dist/Bop-0.1.4-portable.exe --out D:/bop-dev/live-exe
+ok=true  steps=13  failed=0
+  ok  app-started: C:/Users/nguye/AndroidStudioProjects/TwoAccMess/desktop/dist/Bop-0.1.4-portable.exe · 4 devtools targets
+  ok  dashboard-ipc: {"spaces":"A,B,C,D","bubble":true,"theme":"system","encryption":true}
+  ok  bubble-window: {"x":0,"y":361,"width":64,"height":64}
+  ok  space-loaded: {"url":"http://127.0.0.1:8791/chat.html","bridge":"function","permission":"granted","title":"Live chat"}
+  ok  web-notification: {"raised":{"body":"hello from the page","silent":true},"title":"Live chat · Live check","body":"hello from the page","card":"NEW MESSAGE ALERT Live chat · Live check hello from the page Open Live chat ×"}
+  ok  title-unread: {"title":"Live chat · unread increased","body":"Any other site · 3 unread reported by tab title (not message IDs)"}
+  ok  watch-scheduled: {"baseline":"249b6f03\u0000","body":"2 studies available"}
+  ok  alerts-page: {"rows":["Live board changed","Live chat · unread increased","Live chat · Live check"],"summary":"3 unread · 3 total"}
+  ok  bubble-badge: {"hidden":false,"text":"3"}
+  ok  pane-unthrottled-when-open: {"open":["C"],"pane":{"ticks":20,"state":"visible","hidden":false,"focus":false}}
+  ok  background-pane-unthrottled: {"ticks":20,"state":"visible","hidden":false,"focus":false}
+  ok  tray-and-dashboard: {"tray":true,"dashboardVisible":true,"packaged":true}
+  ok  start-at-login: {"before":{"wanted":true,"supported":true,"registered":true,"portable":true,"error":null},"off":{"wanted":false,"supported":true,"registered":false,"portable":true,"error":null},"on":{"wanted":true,"supported":true,"registered":true,"portable":true,"error":null}}
+```
+
+The live check launches the app the way a user does (no smoke flag, a real HTTP origin on 127.0.0.1,
+its own `--user-data-dir`) and then reads what the app itself reports: the dashboard through its own
+preload IPC, the bubble window, each space page, the reminder card, the Alerts page, the tray state
+and the start-up entry, which it also toggles off and on again.
+
+## The real profile, started from the delivered copy
+
+```
+Get-Process Bop -> window enumeration (EnumWindows + GetWindowRect):
+  "Bop bubble" visible=True at 0,361 size 64x64
+  "Bop"        visible=True at 320,106 size 1280x820
+
+HKCUSoftwareMicrosoftWindowsCurrentVersionRun
+  com.bop.desktop = "C:Users
+guyeOneDriveDesktopBop-0.1.4-portable.exe" --bop-autostart
+```
+
+Those two lines are the whole point of this release: the dashboard and a 64 px bubble on screen from a
+profile whose stored settings said `bubble: false` (the 0.1.3 default), and the user's own copy — not
+the build output — registered to start with Windows.
+
+## Commands run for the non-visual checks
+
+```
+cd desktop
+npm test                  # 69 unit tests, 0 failed
+npm run smoke             # 30 steps, ok: true (source tree)
+./dist/Bop-0.1.4-portable.exe --bop-smoke --bop-out D:/bop-dev/smoke-014   # 30 steps, ok: true
+node tools/live-check.js --app dist/Bop-0.1.4-portable.exe --out D:/bop-dev/live-exe   # 13 steps, ok: true
+```
+
+## What none of this proves
+
+- No real Messenger, TikTok, WhatsApp or Telegram account was signed in. Message delivery into a space
+  is still unverified; the fixtures are local pages on 127.0.0.1.
+- Service-worker `showNotification` and Web Push are still not captured: Electron does not implement
+  the Push API, so a site that only notifies from its worker cannot be seen.
+- The installer target was not rebuilt and was not installed.
+- The artifact is unsigned: Windows SmartScreen warns on first launch.

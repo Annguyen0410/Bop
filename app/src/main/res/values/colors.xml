@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fallback window background for devices below API 31, where the system splash uses the theme's
+         colour instead of the app's Compose palette. Keep in step with values-night/themes.xml. -->
+    <color name="window_background">#FFF7F5FA</color>
+</resources>

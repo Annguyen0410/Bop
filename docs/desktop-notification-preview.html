@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bop Desktop 0.1.3 — portable build captures</title>
+<style>
+  body { font: 16px system-ui; background: #f7f5fa; color: #292137; max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+  img { max-width: 100%; border-radius: 16px; border: 1px solid #ddd; }
+  section { margin: 28px 0; }
+  code { background: #eee; padding: 2px 5px; }
+  .note { background: #e6efcc; padding: 16px; border-radius: 12px; }
+  .warn { background: #ffe9d6; padding: 16px; border-radius: 12px; }
+</style>
+
+<h1>Bop Desktop — captures from the packaged portable EXE</h1>
+
+<p class="note">
+  <strong>0.1.4 (9 October 2026).</strong> Three surfaces of the <code>Bop-0.1.4-portable.exe</code> build
+  (that build and every other one before 0.1.9 were deleted on 10 October 2026, so the file named here is
+  a record, not something on disk),
+  captured while it ran as a normal application and its own live check drove it:
+  the whole desktop with the 64&nbsp;px bubble docked flush to the left edge and the dashboard open;
+  the Alerts page after a web notification and a watched-page change reached it; and Bop's own reminder
+  card carrying a message a page raised itself. Live check:
+  <strong>13/13 steps, ok: true</strong> —
+  <a href="evidence/desktop-portable/live-check-014.json">live-check-014.json</a>; smoke:
+  <strong>ok: true, 30 steps</strong> —
+  <a href="evidence/desktop-portable/packaged-smoke-014.json">packaged-smoke-014.json</a>.
+</p>
+
+<section>
+  <h2>The bubble, on a real desktop, with no bubble in the settings file</h2>
+  <p>The profile this copy started from stored the old <code>bubble: false</code> default; the window
+  enumeration of the running app reports <code>"Bop bubble" visible=True at 0,361 size 64x64</code> next
+  to the dashboard. That is the "bubble is there when the computer starts" behaviour.</p>
+  <img src="screenshots/bop-014-desktop-bubble.png" alt="Full desktop screenshot with the Bop bubble docked at the left edge and the dashboard open">
+</section>
+
+<section>
+  <h2>A message raised by the page becoming a card</h2>
+  <p>The page in space <em>Live chat</em> called its own <code>new Notification('Live check', …)</code>.
+  Bop mirrored it into the alert list and drew this card, without stealing focus.</p>
+  <img src="screenshots/bop-014-reminder-card.png" alt="Bop reminder card for a web notification">
+</section>
+
+<section>
+  <h2>The Alerts page</h2>
+  <p>Three alerts in one list: a web notification, an unread tab title, and a watched page that changed
+  in place and raised its card on the watcher's own timer.</p>
+  <img src="screenshots/bop-014-alerts-page.png" alt="Bop Alerts page with a web notification, an unread title and a watched page change">
+</section>
+
+<p class="warn">
+  Every build is <strong>not code-signed</strong>, so Windows SmartScreen warns on first launch
+  (<em>More info → Run anyway</em>). The pages below are <strong>local fixture pages</strong>, not real
+  accounts: no Messenger, TikTok or Telegram sign-in was used, and no real provider message was delivered.
+</p>
+
+<section>
+  <h2>0.1.3 captures (kept for comparison)</h2>
+  <p>Captured by <code>desktop/dist/Bop-0.1.3-portable.exe</code> (since deleted) during its 25-step smoke
+  on 8 October 2026: <strong>ok: true, 25 steps, 4 alerts</strong> —
+  <a href="evidence/desktop-portable/packaged-smoke.json">packaged-smoke.json</a>.</p>
+</section>
+
+<section>
+  <h2>Dashboard (0.1.3)</h2>
+  <p>Spaces A and B point at the same local fixture page. Notice the unread metadata per space and the
+  separate browser session each space keeps.</p>
+  <img src="screenshots/bop-013-portable-dashboard.png" alt="Bop dashboard captured from the packaged portable application">
+</section>
+
+<section>
+  <h2>One Bop bubble</h2>
+  <p>The bubble shows the pending count; the smoke drives the real IPC path and the live badge moves from
+  4 to 3 when account A's alert is marked read.</p>
+  <img src="screenshots/bop-013-portable-bubble.png" alt="The Bop bubble with its unread badge">
+</section>
+
+<section>
+  <h2>Bop's own reminder card</h2>
+  <p>This is the 0.1.3 fix that made a message visible again: Bop draws its own card in the corner of the
+  screen because Windows drops every toast for an application with no Start Menu shortcut — which is
+  exactly the portable build. The smoke asserted that the card sits fully on screen, stays clear of a
+  bubble parked in the same corner, and that opening it opens account A and marks the alert read.</p>
+  <img src="screenshots/bop-013-portable-reminder.png" alt="Bop's reminder card for a new message">
+</section>
+
+<section>
+  <h2>A space page</h2>
+  <p>A social space asks for the desktop site, because the phone layouts of TikTok, WhatsApp, Snapchat and
+  Skype have no messages page to watch at all.</p>
+  <img src="screenshots/bop-013-portable-space.png" alt="A Bop space showing a page in its own browser session">
+</section>
+
+<section>
+  <h2>Settings</h2>
+  <p>Stop monitoring releases a space and keeps its cookies; message sound is Bop's own sound only, so
+  detection continues while it is muted.</p>
+  <img src="screenshots/bop-013-portable-settings.png" alt="Bop desktop settings">
+</section>
+
+<section>
+  <h2>What these captures do not show</h2>
+  <ul>
+    <li>No real signed-in account, and no real incoming provider message.</li>
+    <li>No installer was rebuilt this round; the 0.1.3 setup EXE is the earlier build, unchanged.</li>
+    <li>Service-worker <code>showNotification</code> and Web Push are still not captured by the bridge.</li>
+    <li>Audible sound is not verified; OS permission, Focus Assist and channel mute still govern it.</li>
+  </ul>
+  <p>Full write-up: <a href="verification.md">verification.md</a>, <a href="desktop.md">desktop.md</a>,
+  <a href="desktop-release-verification.json">release record</a>.</p>
+</section>

@@ -1,0 +1,36 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Release signing secrets and the keystore itself: never committed.
+keystore.properties
+*.jks
+*.keystore
+
+# Agent run logs kept for evidence; not part of the project.
+.freebuff/
+
+# Bop Desktop: the Electron binary and npm tree are reinstalled with `npm install`.
+desktop/node_modules/
+desktop/dist/
+
+# Bop Desktop: throwaway browser profiles and release smoke evidence, local only.
+desktop/tmp/
+
+# Python bytecode from the bubble-waitroom harness.
+__pycache__/
+
+# JVM replay log written by Android Studio runs.
+replay_pid*.log

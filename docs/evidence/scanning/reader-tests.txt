@@ -1,0 +1,52 @@
+# In-page unread reader: DOM tests, real-engine smoke, packaging
+# Commands and raw output. No real-service markup is involved anywhere below.
+
+$ cd desktop && node --test test/unread-reader.test.js
+✔ the fixture page reports unread and muted unread as separate numbers (128.7251ms)
+✔ a muted arrival changes neither number for an unmuted one (16.8382ms)
+✔ a muted thread with no unread adds nothing to either number (13.1712ms)
+✔ a descriptor without evidence refuses instead of guessing (28.8535ms)
+✔ a page that has not rendered refuses unless an empty state proves the inbox is empty (33.2894ms)
+✔ a badge that draws a dot counts once, exactly like the native title path (12.4671ms)
+✔ a badge carrying its number in an attribute is read from there (25.6438ms)
+✔ an absurd badge is capped at the same ceiling as the title path (16.7251ms)
+✔ a badge whose promised number is missing refuses instead of inventing one (29.9637ms)
+✔ the cap agrees with WebUnread.MAX, which is the same ceiling the title path uses (2.5786ms)
+✔ an unparseable selector is a refusal, not a crash and not a zero (34.0354ms)
+✔ the payload format is exactly the one Kotlin decodes (0.4152ms)
+✔ every catalog app has a descriptor, and no site claims DOM readiness without evidence (6.1211ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2498.5112
+
+$ cd desktop && npm test    # whole desktop suite
+ℹ tests 64
+ℹ pass 64
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+
+$ cd desktop && npm run smoke:unread    # real Chromium, shipped asset injected into the fixture
+PASS  the shipped reader loads in Chromium and reports the fixture
+PASS  the number a card may use excludes muted threads
+PASS  a muted arrival changes the total but not the unmuted number
+PASS  a dot badge found in the engine counts as one unread
+PASS  a descriptor without evidence is refused, not attempted
+PASS  a title-mode catalog app is not a DOM reading
+PASS  a badge whose promised number is missing refuses in a real engine
+report → ../docs/evidence/scanning/reader-smoke.json
+7/7 steps passed
+
+$ ./gradlew :app:mergeDebugAssets
+exit 0; packaged at app/build/intermediates/assets/debug/mergeDebugAssets/unread-reader.js
+
+# Asset under test:  app/src/main/assets/unread-reader.js
+# Fixture page:      desktop/test/fixtures/unread-fixture.html
+# Smoke script:      desktop/src/main/reader-smoke.js (npm run smoke:unread)
+# Smoke report:      docs/evidence/scanning/reader-smoke.json

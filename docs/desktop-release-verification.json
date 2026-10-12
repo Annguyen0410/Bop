@@ -1,0 +1,114 @@
+{
+  "version": "0.1.9",
+  "verifiedOn": "2026-10-10",
+  "unitTests": { "desktop": { "total": 86, "failed": 0, "skipped": 0 }, "androidJvm": { "total": 124, "failed": 0, "errors": 0, "skipped": 0, "forcedRerun": true } },
+  "packagedSmoke": {
+    "file": "desktop/dist/Bop-0.1.9-portable.exe",
+    "how": "the portable EXE itself was launched with --bop-smoke, so this is the shipped asar speaking",
+    "ok": true,
+    "steps": 45,
+    "alerts": 4,
+    "packaged": true,
+    "missingFiles": [],
+    "report": "docs/evidence/desktop-portable/packaged-smoke-019.json"
+  },
+  "liveCheck": {
+    "tool": "desktop/tools/live-check.js",
+    "whatItDoes": "Starts the exact file the user launches (no smoke flag, a real http://127.0.0.1 origin, its own --user-data-dir) and reads what the app reports over its own DevTools protocol.",
+    "packagedSteps": 15,
+    "packagedOk": true,
+    "packagedFailed": 0,
+    "report": "docs/evidence/desktop-portable/live-check-019.json",
+    "npmScript": "npm run smoke:live:exe"
+  },
+  "bubbleDrag": {
+    "before": "0.1.7 let Chromium move the window (`-webkit-app-region: drag`). Measured with the machine's real pointer (tools/drag-check.js: SetCursorPos + mouse_event): a 260x150 drag moved the window 227x131 — 33 points short of the hand. And the only draggable surface was the 60px box minus the 38px `no-drag` button, a ring about 13px wide at 64px, so a press that looks like a grab landed on the button and opened the menu instead.",
+    "after": "The renderer reports the pointer and src/main/bubble-drag.js decides the geometry; main places the window, one point per point. Pressing the CENTRE drags: on this release's portable EXE the live check pressed (70,393) and the window went 38,361 -> 258,491 for a +220,+130 drag, offBy 0, size kept 64x64. A press that travels under 4 points is still a click.",
+    "asserted": "smoke step bubble-drag-live (offBy 0) and bubble-tap-still-clicks (moved:false, menu:true); live-check step bubble-drag-pointer with the OS pointer on the portable EXE; tools/drag-check.js standalone; unit tests in desktop/test/bubble-drag.test.js."
+  },
+  "sectionSwitching": {
+    "before": "A nav click changed the page behind the open space (`.space-open .main { visibility: hidden }`), so Settings and the Guide looked broken until the space was closed with the ✕.",
+    "after": "A nav click leaves the space running in the background pane (session, page and monitor intact) and shows the section.",
+    "asserted": "smoke nav-switch-while-open: pane x 320 -> -20000, open null, page settings, 4 panes still alive; live check repeats it on the portable EXE and reads the pane's own DOM ('2 studies available') afterwards."
+  },
+  "bubbleFace": {
+    "before": "A flat disc with a text smile and a 38px white button in the middle that did not inherit anything from the theme; no way to choose a picture.",
+    "after": "A drawn vector face in a soft-shaded sphere, and Settings -> Floating bubble -> Bubble picture lets the user pick any picture (PNG, JPEG, WebP, BMP, GIF or SVG). It is cropped to the largest centred square, kept at most 256px (retried at 128px if the data URL would not fit), and stored as a data URL inside Bop's own settings file so moving the original cannot break it.",
+    "module": "desktop/src/main/avatar.js",
+    "asserted": "smoke steps bubble-avatar-decoded, bubble-avatar-shown (naturalWidth > 0, so the page's `img-src 'self' data:` policy allows it), settings-avatar, bubble-avatar-cleared; unit tests in desktop/test/avatar.test.js, including that the size bounds in avatar.js and spaces.js agree."
+  },
+  "spacesGrid": {
+    "before": "`repeat(auto-fill, minmax(210px, 1fr))` reserved the tracks nothing landed in: at 1568px wide the three cards stayed about 210px and the rest of the window was empty — the user's 'these spaces huddle up' report.",
+    "after": "`auto-fit` collapses the unused tracks, so the cards take the width they are given.",
+    "asserted": "smoke step spaces-grid-grows: at 1000px content width a card is 296px in a 605px grid; at 1860px it is 733px in a 1480px grid. Every row fills at least 90% of its grid at the wide size."
+  },
+  "englishOnly": {
+    "asked": "\"turn every Vietnamese string into English\".",
+    "desktop": "Already English and re-measured rather than assumed: the delivered app.asar (300,532 bytes, sha256 e07aa451a96f81e33c2e93cd58048d8becb609ed38b68b614056d10f0856e573) decodes to 2 Vietnamese signature characters, both inside binary PNG blobs; every string in it is English. The EXE's own metadata reads ProductName Bop / FileDescription Bop / CompanyName Bop.",
+    "android": {
+      "problem": "Bop's own strings are English, but the AndroidX libraries ship their own translations, so the merged resources carried 88 values-* folders including values-vi and a Vietnamese phone showed library text in Vietnamese ('Tự động điền', 'Trả lời', 'Cuộc gọi đến', 'Đang sàng lọc', 'Từ chối', 'Kết thúc').",
+      "fix": "app/build.gradle.kts: androidResources { localeFilters += listOf(\"en\") }",
+      "before": "release APK of October 5: 1,467,466 bytes, all five Vietnamese probes found",
+      "after": "release APK rebuilt: 1,336,583 bytes (130,883 smaller), sha256 5133aa58bfb759476d0c43bd772b1d328c6c379620e0b637bcb670b507bca141, no Vietnamese probe found, and `aapt2 dump configurations` lists only anydpi-v26 hdpi mdpi night xhdpi xxhdpi xxxhdpi — no locale configuration at all; debug APK rebuilt: 11,682,337 bytes, sha256 eddf3ea528596e7cfb968415c88be17a494d97a13d55895f332595b1780f22ae, likewise no Vietnamese and no locale configuration.",
+      "asserted": "byte probes for six Vietnamese strings against the APKs themselves, plus aapt2's own configuration list; 124 JVM tests re-run with --rerun-tasks, 0 failed."
+    }
+  },
+  "checkReliability": {
+    "why": "Running the smoke on a machine that was busy with something else found two steps that sampled a state instead of waiting for it. Both were waiting faults in the check, not product defects, and both are now bounded waits on the real condition.",
+    "reminderCard": {
+      "seen": "\"no reminder card appeared for a web notification\" — the step awaited a fixed 500 ms after a page raised a notification, but the first card of a run has to create its window and load alert.html first. The same build passed 45/45 once the machine was idle (2 GB free memory at the time of the failure).",
+      "now": "waits for the card window itself, up to 8000 ms, and the failure text reports how long it waited."
+    },
+    "paneVisibility": {
+      "seen": "\"the dashboard reports hidden\" while the user's own copy of Bop sat maximised over the smoke's window — the engine itself reports a covered window as hidden.",
+      "now": "raises the smoke's own window and re-reads it, bounded, reporting visible/focused/minimised with any failure. A window with the 0.1.4 defect (a view never told it had become visible) still fails, so the check keeps its teeth. Fixed run: {state: visible, dashboardWaitedMs: 1, shellWindow: {visible: true, focused: true, minimized: false}}."
+    }
+  },
+  "artifacts": [
+    {
+      "file": "desktop/dist/Bop-0.1.9-portable.exe",
+      "bytes": 85210117,
+      "sha256": "f16b8f152dcf98a36cfb83c0c5f8b3cb98649289aaf5b39ebe81ec516e44b7f1",
+      "appAsarSha256": "e07aa451a96f81e33c2e93cd58048d8becb609ed38b68b614056d10f0856e573",
+      "fileVersion": "0.1.9",
+      "productVersion": "0.1.9.0",
+      "deliveredTo": "C:\\Users\\nguye\\OneDrive\\Desktop\\Bop-0.1.9-portable.exe",
+      "desktopCopyMatches": true,
+      "signed": false,
+      "note": "the only executable in desktop/dist"
+    }
+  ],
+  "removedBuilds": {
+    "why": "\"delete the older builds and keep only the newest one\".",
+    "record": [
+      { "file": "Bop-0.1.2-portable.exe", "bytes": 85176481, "sha256": "1edeb138384bdb9b3deb9e8c4079decab9aabfef2e30a8f56989e2cb43d16bbf" },
+      { "file": "Bop-0.1.2-setup.exe", "bytes": 85405407, "sha256": "52fa33e59be87d2553fdd96b925f8224937e17e2470d06128318a70aa7d2bb13" },
+      { "file": "Bop-0.1.3-portable.exe", "bytes": 85185034, "sha256": "ff764a3d94d6087347426ae66e61e94a79162381bad24d8371500eb876662109" },
+      { "file": "Bop-0.1.3-setup.exe", "bytes": 85405210, "sha256": "228972635412e8c3359848d6a16fad4435dc6bdd21661a25c930ac037e6e3072" },
+      { "file": "Bop-0.1.4-portable.exe", "bytes": 85191512, "sha256": "762b9858cff386892d7c26505fb5247e396aa0ef20cc9b912179306ce0f56fa8" },
+      { "file": "Bop-0.1.5-portable.exe", "bytes": 85195368, "sha256": "635f2d98d3833ab322562632f3de5d83624320a360a116d41ec688cae9e26005" },
+      { "file": "Bop-0.1.6-portable.exe", "bytes": 85196781, "sha256": "01d6782b6cae9e8bac99c4cc6ed6250eb37c4f5563907b346b64139473d115d5" },
+      { "file": "Bop-0.1.7-portable.exe", "bytes": 85202841, "sha256": "5c1f8877a0526cda7c5255fa1c1570b95a10d5cac1b461128720c1b06fb0f2b7" },
+      { "file": "Bop-0.1.8-portable.exe", "bytes": 85213624, "sha256": "3828466165b0c52c1100a1fa4f301f52cb225d4ef26c1a554283c433b9a0298c" }
+    ],
+    "stillOnDisk": "C:\\Users\\nguye\\OneDrive\\Desktop\\Bop-0.1.8-portable.exe could not be deleted: the copy of Bop the user had running holds it ('Device or resource busy'). It can be removed once that instance is quit."
+  },
+  "evidence": "docs/evidence/desktop-portable/release-019.txt",
+  "fixedInThisRelease": [
+    "The Android build shipped Vietnamese after all: 88 merged values-* folders, values-vi among them, because the AndroidX libraries bring their own translations and Bop's own strings being English does not stop them. `androidResources { localeFilters += listOf(\"en\") }` drops every locale from both APKs — the release one loses 130,883 bytes and `aapt2 dump configurations` stops listing languages altogether.",
+    "Two smoke steps could fail on a busy machine although the app was fine, because they sampled a state instead of waiting for it: the reminder card was given a fixed 500 ms to create and load its window, and the dashboard's visibility was read once while another window covered it. Both now wait, bounded, for the real condition.",
+    "The older builds were removed from desktop/dist, with each file's size and sha256 recorded before deletion, so one executable remains.",
+    "`workAreaFor` looked up a work area with work-area-relative coordinates, which named the wrong display whenever a monitor sat left of the primary one; it now reads the window's own position.",
+    "bubble.html's rules moved out of an inline <style> block into bubble.css, for the same reason the space menu had to: a page whose policy is `style-src 'self'` silently drops an inline block, and this bubble now has a face to lose."
+  ],
+  "limitations": [
+    "No account was signed in anywhere: a logged-in panel or messenger session is still unverified, and the fixtures are local pages on 127.0.0.1.",
+    "Neither desktop artifact nor the Android release APK is code-signed, so SmartScreen warns on the first launch and the APK cannot be published as it stands.",
+    "The installer target was not rebuilt and install/uninstall was not executed; the desktop release is the portable EXE only.",
+    "The drag was verified with a mouse pointer on a 100%-scaled 1920x1080 display. Touch and pen are unverified, and so is a scaled display, where screen points and pixels stop being the same number.",
+    "Multi-monitor dragging was not measured: no second display was attached, so the workAreaFor correction is unexercised by a test.",
+    "The operating system's picture picker was not automated — everything after it (decode, crop, bound, store, render, preview, clear) was.",
+    "Service-worker showNotification and Web Push are still not captured (Electron does not implement the Push API).",
+    "The Android APK change is a build configuration only: no device or emulator run accompanied it, and no per-service markup was verified."
+  ]
+}

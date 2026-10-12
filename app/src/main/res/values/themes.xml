@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose paints the cockpit itself, but the window behind it (and the pre-API 31 launch window)
+         still uses these platform colours, so they follow the light palette. -->
+    <style name="Theme.TwoAccMess" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:colorBackground">@color/window_background</item>
+    </style>
+    <style name="Theme.TwoAccMess.Panel" parent="android:Theme.Material.Light.Dialog.NoActionBar">
+        <item name="android:windowMinWidthMajor">94%</item>
+        <item name="android:windowMinWidthMinor">94%</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
+</resources>

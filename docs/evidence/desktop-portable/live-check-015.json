@@ -1,0 +1,70 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "name": "app-started",
+      "detail": "dist/Bop-0.1.5-portable.exe · 4 devtools targets",
+      "ok": true
+    },
+    {
+      "name": "dashboard-ipc",
+      "detail": "{\"spaces\":\"A,B,C,D\",\"bubble\":true,\"theme\":\"system\",\"encryption\":true}",
+      "ok": true
+    },
+    {
+      "name": "bubble-window",
+      "detail": "{\"x\":0,\"y\":361,\"width\":64,\"height\":64}",
+      "ok": true
+    },
+    {
+      "name": "space-loaded",
+      "detail": "{\"url\":\"http://127.0.0.1:8791/chat.html\",\"bridge\":\"function\",\"permission\":\"granted\",\"title\":\"Live chat\"}",
+      "ok": true
+    },
+    {
+      "name": "web-notification",
+      "detail": "{\"raised\":{\"body\":\"hello from the page\",\"silent\":true},\"title\":\"Live chat · Live check\",\"body\":\"hello from the page\",\"card\":\"NEW MESSAGE ALERT Live chat · Live check hello from the page Open Live chat ×\"}",
+      "ok": true
+    },
+    {
+      "name": "title-unread",
+      "detail": "{\"title\":\"Live chat · unread increased\",\"body\":\"Any other site · 3 unread reported by tab title (not message IDs)\"}",
+      "ok": true
+    },
+    {
+      "name": "watch-scheduled",
+      "detail": "{\"baseline\":\"249b6f03\\u0000\",\"body\":\"2 studies available\"}",
+      "ok": true
+    },
+    {
+      "name": "alerts-page",
+      "detail": "{\"rows\":[\"Live board changed\",\"Live chat · unread increased\",\"Live chat · Live check\"],\"summary\":\"3 unread · 3 total\"}",
+      "ok": true
+    },
+    {
+      "name": "bubble-badge",
+      "detail": "{\"hidden\":false,\"text\":\"3\"}",
+      "ok": true
+    },
+    {
+      "name": "pane-unthrottled-when-open",
+      "detail": "{\"open\":[\"C\"],\"pane\":{\"ticks\":20,\"state\":\"visible\",\"hidden\":false,\"focus\":false}}",
+      "ok": true
+    },
+    {
+      "name": "background-pane-unthrottled",
+      "detail": "{\"ticks\":20,\"state\":\"visible\",\"hidden\":false,\"focus\":false}",
+      "ok": true
+    },
+    {
+      "name": "tray-and-dashboard",
+      "detail": "{\"tray\":true,\"dashboardVisible\":true,\"packaged\":true}",
+      "ok": true
+    },
+    {
+      "name": "start-at-login",
+      "detail": "{\"before\":{\"wanted\":true,\"supported\":true,\"registered\":true,\"portable\":true,\"error\":null},\"off\":{\"wanted\":false,\"supported\":true,\"registered\":false,\"portable\":true,\"error\":null},\"on\":{\"wanted\":true,\"supported\":true,\"registered\":true,\"portable\":true,\"error\":null}}",
+      "ok": true
+    }
+  ]
+}

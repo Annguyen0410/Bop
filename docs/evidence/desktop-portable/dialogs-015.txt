@@ -1,0 +1,108 @@
+# Desktop 0.1.4 → 0.1.5 — the dialog bug, reproduced and fixed with a real mouse
+
+Captured on the user's Windows machine (1920x1040 work area, one display, 100% scaling) on
+9 October 2026. Everything below was driven through real OS mouse input at the window's own client
+coordinates (`desktop/tools/click-ui.js` → `click-window.ps1`), not with `element.click()` — a scripted
+DOM click would have passed the broken build, because the handler was never the problem. The profile was
+a copy of the user's own saved profile, so the states below are the states they were in.
+
+## What the user reported (0.1.4, portable EXE from the Desktop)
+
+> "still cannot click New space or add a space, the interface is a mess, and in the task/earnings panel
+> I cannot even click or reach the web, let alone watch it"
+
+## 1. The picker was visible and deaf whenever a space was open
+
+With space A (Messenger) open, a real click on **＋ New space** opened the picker, and a real click on
+**Task / earning panel** inside it did nothing:
+
+```
+before (space A open)
+  #new-space                -> modal: true, heading "A new little space"
+  [data-kind="tasks"] at client 579,177 -> underPid=same process, clicked
+  after: selected = ["social:primary", "tasks:ghost"]   <-- the click never arrived
+  apps listed: messenger, facebook, instagram, whatsapp, tiktok, telegram  (still the social half)
+
+same click, no space open
+  [data-kind="tasks"] at client 579,177 -> clicked
+  after: selected = ["social:ghost", "tasks:primary"]
+  apps listed: usertesting, userlytics, prolific, clickworker, toloka, ... and [data-app="custom"]
+```
+
+Cause: the dialog is drawn by the dashboard renderer, whose view sits *below* the space views in the
+window; the open space's pane covered the dialog and took the click. Where the pane had never navigated
+(the user's own broken space, below) nothing was painted over the dialog, so it looked perfect and was
+equally deaf.
+
+After 0.1.5 the same real click, with a space open, switches the picker:
+
+```
+ok  dialog-view-order: {"pickerShown":true,"raised":true,"pickerClosed":true,"lowered":true,"children":5}
+    # raised: with the dialog open the dashboard view is the top child (index 4 of 5)
+    # lowered: after Cancel it is back at index 0, under the panes
+```
+
+## 2. A space with no address was a trap
+
+The user's profile carried `C: "Watch test"`, `custom`, `tasks`, `url: ""`, watch enabled, 9 failed
+reads in a row. Clicking it opened an empty pane over the whole hub:
+
+```
+0.1.4  click space C -> open: ["C"], loaded C: false, body.classList = "space-open"
+       screenshot: the right side is an empty dark area; the pane paints nothing and eats every click
+0.1.5  click space C -> {"ok":false,
+                        "error":"This space has no address yet. Open Edit and paste the page it should show.",
+                        "needsEdit":true}
+       the dashboard shows the Edit dialog for C with that line at the top, the cursor in the Address
+       field, and no space left open behind it
+```
+
+The same space, repaired through the UI with a real mouse (click the field, type, click Save):
+
+```
+spaces: ["A openable=true watch=false url=-",
+         "B openable=true watch=false url=-",
+         "C openable=true watch=true  url=http://127.0.0.1:8790/panel"]
+click C again -> open: ["C"], loaded: ["A","B","C"], monitoring: observing-auth-unknown
+inside the pane: { url: "http://127.0.0.1:8790/panel", ua: "mobile" }
+real click at client 700,300 -> { clicks: 1, log: "clicks: 1 on HTML" }
+```
+
+## 3. The dialog's own buttons could be off screen
+
+The edit form is taller than a short window. On 0.1.4 the footer scrolled with the form:
+
+```
+0.1.4  #save at client 403,1048 in a 820-high window -> underPid=0 (the click landed outside the app)
+0.1.5  viewport 1264x781 · dialog 640 high · body scrollable: true
+       footer y=637, #save y=650 -> saveOnScreen: true
+       elementFromPoint(center of #save) = "save"    (the footer no longer sits on the last field)
+```
+
+## 4. The same three checks on the packaged 0.1.5 build, with a real mouse
+
+The runs above used the source tree. The packaged build was then driven the same way —
+`dist/win-unpacked/Bop.exe` (the asar the portable artifact wraps) with its own `--user-data-dir` and
+`--remote-debugging-port`, so nothing touched the user's running app:
+
+```
+snapshot: packaged=true version=0.1.5
+  spaces: ["A:Account A openable=true", "B:Account B openable=true", "C:No address openable=false"]
+
+1) real click on space B (custom panel)
+   -> open: ["B"], loaded: ["B"]
+2) with B open, real click "+ New space", then real click "Task / earning panel"
+   -> selected: ["social:ghost", "tasks:primary"], apps: usertesting, userlytics, prolific, ...
+3) real click on space C (no address)
+   -> dialog: true
+      warn:   "This space has no address yet. Open Edit and paste the page it should show."
+      focused: "edit-url"    saveOnScreen: true
+      open:   []             (no empty pane, and the previous space was closed)
+```
+
+The window screenshot of step 3 shows the sidebar marking the space *"No address · custom · C · needs an
+address"* with a `!` badge, the Address field empty and focused, and the dialog's Save / Reload page /
+Clear session / Remove space / Cancel row pinned to the bottom of the dialog.
+
+**Not proved here:** the same clicks on a real signed-in Messenger or a real Prolific account, and the
+portable artifact on a machine other than this one.

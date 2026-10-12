@@ -1,0 +1,40 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "name": "the shipped reader loads in Chromium and reports the fixture",
+      "passed": true,
+      "detail": "got \"unread=5\\nmuted=2\""
+    },
+    {
+      "name": "the number a card may use excludes muted threads",
+      "passed": true,
+      "detail": "got 3"
+    },
+    {
+      "name": "a muted arrival changes the total but not the unmuted number",
+      "passed": true,
+      "detail": "payload \"unread=6\\nmuted=3\", unmuted 3"
+    },
+    {
+      "name": "a dot badge found in the engine counts as one unread",
+      "passed": true,
+      "detail": "got \"unread=7\\nmuted=3\""
+    },
+    {
+      "name": "a descriptor without evidence is refused, not attempted",
+      "passed": true,
+      "detail": "got \"\""
+    },
+    {
+      "name": "a title-mode catalog app is not a DOM reading",
+      "passed": true,
+      "detail": "got \"\""
+    },
+    {
+      "name": "a badge whose promised number is missing refuses in a real engine",
+      "passed": true,
+      "detail": "got \"\""
+    }
+  ]
+}

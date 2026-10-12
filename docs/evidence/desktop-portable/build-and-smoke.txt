@@ -1,0 +1,38 @@
+# Desktop 0.1.3 — portable-only rebuild and packaged smoke
+# Windows / Git Bash. Verbatim commands and their real output.
+
+$ cd desktop && npx electron-builder --win portable --x64
+exit 0
+    • no node modules returned while searching directories  searchDirectories=[""]
+    • signing with signtool.exe  path=dist\win-unpacked\Bop.exe
+    • building        target=portable file=dist\Bop-0.1.3-portable.exe archs=x64
+    • signing with signtool.exe  path=dist\win-unpacked\resources\elevate.exe
+    • signing with signtool.exe  path=dist\Bop-0.1.3-portable.exe
+
+$ ls -l desktop/dist
+  85176481       85176481 bytes  Oct 7 20:38  desktop/dist/Bop-0.1.2-portable.exe
+  85405407       85405407 bytes  Oct 7 20:38  desktop/dist/Bop-0.1.2-setup.exe
+  85185034       85185034 bytes  Oct 8 22:01  desktop/dist/Bop-0.1.3-portable.exe
+  85405210       85405210 bytes  Oct 8 11:22  desktop/dist/Bop-0.1.3-setup.exe
+
+$ sha256sum desktop/dist/Bop-0.1.3-portable.exe
+  ff764a3d94d6087347426ae66e61e94a79162381bad24d8371500eb876662109 *desktop/dist/Bop-0.1.3-portable.exe
+
+$ powershell Get-AuthenticodeSignature desktop/dist/Bop-0.1.3-portable.exe
+  Status: NotSigned  (SmartScreen warns on first launch)
+
+$ cd desktop && npm run smoke        # source, exit 0
+  SMOKE OK
+  recorded steps: 25
+
+$ desktop/dist/Bop-0.1.3-portable.exe --bop-smoke    # the built artifact itself
+  ok = true | steps = 25 | alerts = 4
+  - watcher → {"baseline":[{"id":"C","alert":false,"failures":0}],"quiet":[{"id":"C","alert":f
+  - web-notification → ["Watch test · New study"]
+  - reminder-card → {"text":"NEW MESSAGE ALERT Account A · Same chat Second message Open Account A +
+  - bubble-unread-live → {"before":{"hidden":false,"text":"4"},"after":{"hidden":false,"text":"3"}}
+  - screenshots → C:\Users\nguye\AppData\Roaming\Bop\smoke
+  NOTE: a portable launcher returns before its child exits; the child's completed smoke.json is the evidence.
+
+# Captures copied from the packaged run into docs/screenshots/bop-013-portable-*.png
+# Backup of the pre-rebuild dist: .freebuff/dist-before-portable/

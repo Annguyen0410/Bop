@@ -1,0 +1,76 @@
+<resources>
+    <string name="app_name">Bop</string>
+
+    <string name="notification_access_label">Bop · message notification access</string>
+    <!-- Embedded browser screen -->
+    <string name="web_slot_heading">%1$s · slot %2$s</string>
+    <string name="web_button_hub">Hub</string>
+    <string name="web_button_spaces">Spaces</string>
+    <string name="web_picker_unavailable">No document picker is available.</string>
+    <string name="web_spaces_empty">Open Bop to refresh your spaces.</string>
+    <string name="web_clear_update_required">Update System WebView to clear all data for this space safely. Nothing was cleared.</string>
+    <string name="web_space_cleared">Space %1$s cleared</string>
+    <string name="web_button_inbox">Inbox</string>
+    <string name="web_button_reload">Reload</string>
+    <string name="web_button_options">Options</string>
+    <string name="web_origin_empty">%1$s · space %2$s</string>
+    <string name="web_origin_page">https://%1$s</string>
+    <string name="web_clear_title">Clear session %1$s?</string>
+    <string name="web_clear_message">Remove cookies, website storage and browser cache for this web session only. You may need to sign in and restore encrypted-chat history again. This does not delete messages from the service or log out your other devices. Every other account session is left untouched.</string>
+    <string name="web_clear_confirm">Clear this session</string>
+    <string name="web_clearing">Clearing local session %1$s…</string>
+    <string name="web_status_options_failed">Options could not be opened (%1$s); the session itself is unchanged.</string>
+    <string name="web_options_about_title">A web session, not a native app</string>
+    <string name="web_options_about_message">%1$s: %2$s\n\nLog in separately in each space and set an app per slot from the hub. Installed apps and optional notification-profile bindings are unrelated to these web sessions.\n\nIf the service asks for a secure-storage PIN or blocks WebView, follow its official recovery flow; this app cannot bypass it. Popups, external links, downloads, calls and background push are not supported. Desktop/mobile mode changes only this account. The mobile site is the default because it is the layout that fits every screen size; a service whose phone layout has no messages page at all (TikTok, Zalo, WhatsApp Web) starts on the desktop site instead so its chat list is reachable, and your own switch here always wins from then on. If a dialog still hides its own close button, choose Fit the page to this screen in these options. The floating bubble opens this account screen; the webpage is not drawn inside the overlay.\n\nWhile this page is on screen, Bop reads nothing from it but its own tab title: an unread marker there updates the card and the bubble badge of this slot as soon as a message arrives, without reading or storing any message text. Leaving the space stops that reading — a hidden page does not poll for hours — and coming back reads the marker again, so a message that arrived in the meantime is still reported. Nothing arrives while the session is closed, so a closed web session still cannot raise an account-has-a-message card.</string>
+    <string name="web_options_title">Web session %1$s</string>
+    <string name="web_options_fit">Fit the page to this screen</string>
+    <string name="web_options_desktop">Use desktop website</string>
+    <string name="web_options_mobile">Use mobile website</string>
+    <string name="web_options_clear">Clear local session %1$s</string>
+    <string name="web_options_copy">Copy session details</string>
+    <string name="web_options_about">About this integration</string>
+    <string name="web_session_unavailable">Web session unavailable</string>
+    <string name="web_unavailable_message">%1$s\n\nSettings → Session diagnostics can copy this text for a report.</string>
+    <string name="web_copy_details">Copy details</string>
+    <string name="web_copied">Copied — paste it into your report</string>
+    <string name="web_clip_label">Bop web session</string>
+    <string name="web_status_intro">Opening %1$s…</string>
+    <string name="web_status_loading">Loading %1$s…</string>
+    <string name="web_status_ready">%1$s · space %2$s</string>
+    <string name="web_status_page_failed">Page failed to load. Check internet/WebView, then tap Reload.</string>
+    <string name="web_status_fitted">Page re-fitted to this screen.</string>
+    <string name="web_status_http_error">The site returned HTTP %1$d. This wrapper cannot bypass login or site restrictions.</string>
+    <string name="web_status_tls">TLS certificate rejected. Do not enter credentials; check device time/network.</string>
+    <string name="web_status_blocked_navigation">Blocked navigation outside %1$s or a native-app link. This session stays inside the hub.</string>
+    <string name="web_status_blocked_page">This destination is not an allowed %1$s HTTPS page.</string>
+    <string name="web_status_renderer_gone">Web renderer stopped. Close and reopen this account; the saved session is unchanged.</string>
+    <string name="web_status_media_disabled">Camera/microphone access is disabled in this web prototype.</string>
+    <string name="web_status_downloads_disabled">Downloads are disabled in this prototype; no authenticated URLs are handed to other apps.</string>
+    <string name="web_origin_blocked">Blocked destination · %1$s slot %2$s</string>
+    <string name="web_consent_title">Sign in to web account %1$s</string>
+
+    <!-- Overlay bubble and its account menu -->
+    <plurals name="bubble_content_description">
+        <item quantity="zero">Messaging hub bubble. No unacknowledged chats. Tap to choose an account; drag to move.</item>
+        <item quantity="one">Messaging hub bubble. %1$d unacknowledged chat. Tap to choose an account; drag to move.</item>
+        <item quantity="other">Messaging hub bubble. %1$d unacknowledged chats. Tap to choose an account; drag to move.</item>
+    </plurals>
+    <string name="bubble_menu_title">Your spaces · %1$d</string>
+    <string name="bubble_menu_close">Close account menu</string>
+    <string name="bubble_open_hub">Open hub screen</string>
+    <string name="bubble_stop">Stop bubble</string>
+    <string name="bubble_row_description">Open %1$s in slot %2$s</string>
+    <plurals name="bubble_row_description_pending">
+        <item quantity="one">Open %1$s in slot %2$s, %3$d unacknowledged chat</item>
+        <item quantity="other">Open %1$s in slot %2$s, %3$d unacknowledged chats</item>
+    </plurals>
+    <plurals name="bubble_row_new_chats">
+        <item quantity="one">%1$d new chat</item>
+        <item quantity="other">%1$d new chats</item>
+    </plurals>
+    <string name="bubble_row_bound">Bound · no new chat</string>
+    <string name="bubble_avatar_description">Account %1$s picture</string>
+    <string name="bubble_control_title">Bop floating hub</string>
+    <string name="bubble_control_text">Drag to move · tap to choose an account</string>
+    <string name="bubble_control_stop">Stop bubble</string>
+</resources>

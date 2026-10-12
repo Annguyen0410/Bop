@@ -1,0 +1,123 @@
+Bop Desktop 0.1.8 — a bubble you can actually move, a picture you can choose, sections that switch
+=================================================================================================
+Round reported (from the packaged 0.1.7 the user was running):
+
+  "the chat bubble cannot be moved freely at all; when I open a space, the other sections like Guide or
+   Settings or Alerts do not respond — I have to press ✕ to leave the space first, which is a nuisance,
+   let me switch freely between all sections; also make the bubble's avatar icon a bit nicer and let me
+   design/add my own picture to it; and when the app is full screen these spaces should not huddle up
+   like that — let them compress or expand so it looks better."
+
+All four were measurable, and the first one measured differently from the report: the drag did work, but
+only if the pointer happened to land on a ~13px ring, and it arrived short.
+
+Artifact under test
+-------------------
+  desktop/dist/Bop-0.1.8-portable.exe   85 213 624 bytes
+  sha256 3828466165b0c52c1100a1fa4f301f52cb225d4ef26c1a554283c433b9a0298c
+  delivered to C:\Users\nguye\OneDrive\Desktop\Bop-0.1.8-portable.exe (sha256 identical)
+
+  1. The bubble's drag, with the machine's real pointer
+  ----------------------------------------------------
+  Measured on 0.1.7 first, with tools/drag-check.js (SetCursorPos + mouse_event, i.e. a real press, real
+  moves, real release over the real window — a synthetic DOM event cannot prove anything here, because
+  the window is moved by the operating system):
+
+      press (rim) 43,393 · asked 260x150 · window 38,361 -> 265,492
+      moved 227,131  =>  33 points short of the hand that dragged it
+
+  And the surface: `-webkit-app-region: drag` covered the 60px box while the 38px round button in the
+  middle was `no-drag`, so the only part of a 64px bubble that moved the window was a ring about 13px
+  wide. A press that looks like a grab lands on the button — which opens the menu, exactly what the
+  user's own screenshot shows.
+
+  Fix: the renderer reports the pointer (pointerdown/move/up with screenX/screenY and pointer capture) and
+  main places the window, one point per point, through src/main/bubble-drag.js. A press that travels less
+  than 4 points is still a click, so the menu is as easy to open as before.
+
+  Measured on 0.1.8, same tool, pressing the CENTRE of the bubble (where a hand aims):
+
+      source build     press 70,393 · before 38,361 · after 258,491 · asked +220,+130 · offBy 0
+      portable EXE     press 70,393 · before 38,361 · after 258,491 · asked +220,+130 · offBy 0
+      dev run          -X1 43 -Y1 393 -X2 343 -Y2 513   => moved dx 300 dy 120 of 300x120, offBy 0
+
+  Size unchanged by the drag (64x64), the pointer was put back where it was, and the stored spot
+  (0.134375 x 0.475775 of the 1920x1032 work area) resolves to 258,491 — the point the pointer ended on.
+
+  A tap still behaves: smoke step bubble-tap-still-clicks {at:[1810,942], after:[1810,942], moved:false,
+  menu:true} — a press that does not travel neither moves the bubble nor stops opening the space menu.
+
+  2. Sections switch while a space is open
+  ---------------------------------------
+  Reproduced: nav clicks changed the page *behind* the open space (`.space-open .main { visibility:
+  hidden }`), so Settings/Guide/Alerts looked dead until the ✕ was pressed. A nav click now leaves the
+  space open in the background and shows the section; the space keeps its session, its page and its
+  monitor.
+
+      smoke nav-switch-while-open  before {open:"A", panes:4, monitoring:"observing-auth-unknown",
+                                            paneX:320}
+                                   after  {open:null, panes:4, monitoring:"observing-auth-unknown",
+                                            paneX:-20000}
+                                   page settings · space-open false · pane still rendering
+      live check (portable EXE)    {page:"settings", spaceOpen:false, text:"Settings\nSmall tweaks…"},
+                                   paneText:"2 studies available"
+
+  3. The bubble's face
+  -------------------
+  The default is now a drawn vector face in a soft-shaded sphere (bubble.css, the page's own file: the
+  old inline <style> was one CSP change away from being dropped, which is what had already happened to
+  the space menu). Any picture can be chosen in Settings → Floating bubble → Bubble picture:
+
+      smoke bubble-avatar-decoded  source: a real 1264x781 PNG on disk -> pixels.kept 256 (a centred
+                                   square, never stretched), data URL 35 654 characters (~26 KB)
+      smoke bubble-avatar-shown    {shown:true, drawn:true, loaded:true}  (naturalWidth > 0: the page's
+                                   own `img-src 'self' data:` policy allowed it)
+      smoke settings-avatar        {image:true, back:true}  — preview plus "Use the drawn face"
+      smoke bubble-avatar-cleared  {shown:false, drawn:true, stored:0}
+
+  The picture is stored as a data URL inside Bop's own settings file, not as a path, so moving or deleting
+  the original cannot break it; it is cropped to the largest centred square, kept at most 256px, and
+  retried at 128px before it is refused. An oversized or unreadable file is refused with words, and the
+  refusal is shown in Settings (avatar.test.js covers the rules, including that the two size bounds in
+  avatar.js and spaces.js agree).
+
+  4. The spaces grid uses the window it is given
+  ---------------------------------------------
+  Reproduced from the user's screenshot: at 1568px wide the three cards sat in the first three of nine
+  `auto-fill` tracks and the rest of the window stayed empty, because `auto-fill` reserves the tracks
+  nothing landed in. `auto-fit` collapses them.
+
+      smoke spaces-grid-grows  content 1000px: card 296px, row 605 of a 605px grid
+                               content 1860px: card 733px, row 1480 of a 1480px grid
+                               (asserted: cards grow with the window, and every row fills >= 90% of its
+                               grid)
+
+Checks run on the delivered file
+--------------------------------
+  unit tests (npm test)                 86 passed, 0 failed      (was 74; +bubble-drag.js, +avatar.js)
+  source smoke                          45 steps, ok             docs/evidence/desktop-portable/source-smoke-018.json
+  packaged smoke (portable EXE)         45 steps, ok, packaged:true, missingFiles:[]  packaged-smoke-018.json
+  live check on the portable EXE        15/15, 0 failed          live-check-018.json
+  real-pointer drag on the portable EXE offBy 0, size kept      (step bubble-drag-pointer in the same report)
+
+  New smoke steps: nav-switch-while-open, bubble-drag-live, bubble-tap-still-clicks,
+  bubble-avatar-decoded, bubble-avatar-shown, settings-avatar, bubble-avatar-cleared, spaces-grid-grows.
+  New live-check steps: bubble-drag-pointer (real pointer), nav-switch-while-open.
+
+  Screenshots: bubble-face-drawn-018.png · bubble-picture-018.png · bubble-small-018.png (48px, 80%
+  opacity) · bubble-dragged-018.png (after the real pointer drag) · dashboard-wide-018.png (1860px) ·
+  settings-avatar-018.png
+
+Known limits of this round
+--------------------------
+  - No account was signed in anywhere; the fixtures are local pages on 127.0.0.1.
+  - The drag was verified with a mouse pointer. A touch or pen gesture was not measured, and the display
+    used is 100% scaled, where screen points and pixels are the same number; a 125% display was not tested.
+  - Multi-monitor dragging was not measured. `workAreaFor` was corrected to read the window's own position
+    (it used to look up a work area with work-area-relative coordinates), but no second display was attached.
+  - The picture dialog itself (the OS picker) was not automated. Everything after it was: decode, crop,
+    store, render, preview and clear.
+  - A drag whose pointer leaves the 64px window is covered (every measured drag travelled 130-300 points
+    outside it, and pointer capture keeps the events coming), but a drag that leaves the *screen* is not.
+  - The NSIS installer target was not rebuilt, so 0.1.8 exists as a portable file only.
+  - The file is not code-signed, so SmartScreen warns on first launch.

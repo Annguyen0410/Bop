@@ -1,0 +1,63 @@
+
+> bop-desktop@0.1.3 test
+> node --test
+
+✔ docking leaves zero horizontal gap on both edges (2.6141ms)
+✔ dragging uses independent horizontal and vertical margins (0.3522ms)
+✔ a drag never leaves part of the bubble off screen (0.6969ms)
+✔ the spot the user left is the spot that comes back, even on another monitor (0.5147ms)
+✔ a corrupt or off-screen stored spot falls back instead of vanishing (0.3826ms)
+✔ the space menu sits beside the bubble and stays fully on screen (0.7095ms)
+✔ a bubble that changes size still docks flush at its new width (0.532ms)
+✔ a menu taller than the screen is clamped into it rather than pushed away (0.5125ms)
+✔ three accounts on the same service have independent baselines and unread (11.1665ms)
+✔ decreases update unread without alerting; dot cannot identify a second message (4.3305ms)
+✔ parses bounded badge shapes and rejects unrelated oversized numbers (0.4045ms)
+✔ normal restart rebaselines historical unread; supported failure recovery keeps baseline (0.4818ms)
+✔ explicit duplicate event IDs are ignored but repeated identical text has distinct events (7.5395ms)
+✔ title and notification pair in either order; one duplicate never consumes a later distinct event (1.0959ms)
+✔ burst title delta pairs one credit per event and later events are not blanket-muted (0.3946ms)
+✔ expired account is a status hint and does not affect peers (0.3485ms)
+✔ saved metadata is bounded, contains no credentials/previews and respects sound mute (1.829ms)
+✔ same notification tag on two accounts is distinct in the OS and routed locally (5.1764ms)
+✔ untagged notifications do not replace each other even when titles match (3.5235ms)
+✔ permission remains native and changes are visible without reinjection (2.7754ms)
+✔ only reminders the user asked for pop up (1.7493ms)
+✔ a newer alert takes the card over and counts the ones it replaced (1.6188ms)
+✔ an alert that does not pop never disturbs the card that is up (0.3133ms)
+✔ hiding the card forgets it: the next alert starts a fresh count (0.3087ms)
+✔ the key of an alert is what acknowledging it uses (0.2929ms)
+✔ the card sits in the corner, fully on screen, and steps around the bubble (0.9852ms)
+✔ space names round-trip through every ordinal a user could reach (10.4602ms)
+✔ a bad or hand-edited name is rejected rather than guessed (0.4042ms)
+✔ two hundred spaces get two hundred distinct names and nonzero-order sorting (10.542ms)
+✔ removing a space returns its letter to the pool instead of burning it (0.5237ms)
+✔ hiding a space keeps its label, app and watch settings for a later return (0.6735ms)
+✔ changing the app moves the space between the two halves of the hub (0.4011ms)
+✔ a custom space only ever allows the host the user typed (1.8834ms)
+✔ catalog spaces allow their own domains and nothing else (0.392ms)
+✔ every catalog entry is a real https home with at least one host, and both kinds are populated (0.7278ms)
+✔ a damaged settings file is repaired instead of losing every space (1.1576ms)
+✔ watch settings are clamped into a range a scheduler can actually use (0.3712ms)
+✔ watch phrase filters are trimmed, capped, and default to off (0.4745ms)
+✔ bubble settings are clamped, snapped to an offered size, and round-trip through the file (1.3472ms)
+✔ a messaging space asks for the desktop site, a task panel for the layout that fits (1.148ms)
+✔ only explicitly opened enabled spaces are restored after relaunch (0.5733ms)
+✔ remote notification payload cannot choose the owning space or crash alert formatting (0.4557ms)
+✔ alerts group by space and a repeated tag replaces its older card (0.4337ms)
+✔ the first reading of a page never raises a card (1.7743ms)
+✔ a real change alerts once and not again until the page changes back (2.3228ms)
+✔ whitespace and line-break churn is not a change (0.359ms)
+✔ an outage is never a change, but a change during the outage is still reported (0.4324ms)
+✔ consecutive failures stretch the interval, capped (0.4503ms)
+✔ only watched spaces are ever due, and the oldest runs first (1.505ms)
+✔ a phrase filter keeps a noisy board quiet until the page says what matters (0.5824ms)
+✔ the summary is short enough to read in a card (0.2736ms)
+ℹ tests 51
+ℹ suites 0
+ℹ pass 51
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 362.8249

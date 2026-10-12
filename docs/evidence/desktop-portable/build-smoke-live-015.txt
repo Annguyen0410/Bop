@@ -1,0 +1,60 @@
+# Desktop 0.1.5 — build, packaged smoke, live check, hashes
+
+Captured on the user's Windows machine (1920x1080, one display) on 9 October 2026.
+
+## Artifact
+
+```
+npm run dist:portable                             # exit 0, Windows x64 (electron-builder 26.x)
+dist/Bop-0.1.5-portable.exe    85195368 bytes
+sha256  635f2d98d3833ab322562632f3de5d83624320a360a116d41ec688cae9e26005
+```
+
+## Unit tests — `npm test` (node --test, no Electron)
+
+```
+tests 69, pass 69, fail 0, skipped 0, duration_ms ~1700
+spaces.test.js gained the address rule: openTarget() refuses a `custom` space with no address, refuses a
+plain-http address on a non-loopback host, allows a loopback http address, and returns the URL when the
+space is whole.
+```
+
+## Packaged smoke — the packaged build run with `--bop-smoke`, its own isolated profile
+
+`dist/win-unpacked/Bop.exe --bop-smoke` (the same asar the portable artifact wraps; the portable launcher
+was not used for this run because the Bop the user is running holds the single-instance lock and a second
+non-smoke launch exits silently by design).
+
+```
+ok=true  steps=32  alerts=4  failed=0
+  packaged-files: {"packaged":true,"iconEmpty":false,"icon":{"width":64,"height":64},"missingFiles":[]}
+  autostart: {"wanted":true,"supported":true,"registered":false,"portable":false,"error":null,"executable":"app"}
+  space-without-address: {"refused":{"ok":false,
+      "error":"This space has no address yet. Open Edit and paste the page it should show.","needsEdit":true},
+      "panes":["C","A","B","D"],"open":null}
+  dialog-view-order: {"pickerShown":true,"raised":true,"pickerClosed":true,"lowered":true,"children":5}
+  open-pane-visible: {"state":"visible"}
+  settings-ui: {"missing":[]}
+  reminder-opened: {"acknowledged":true,"open":"A","hidden":true}
+  screenshots: C:\Users\nguye\AppData\Roaming\Bop\smoke
+```
+
+The raw run is `packaged-smoke-015.txt`, the machine-readable one `packaged-smoke-015.json`.
+
+## Live check — the real startup path, no smoke flag
+
+`npm run smoke:live` on the source tree: **LIVE CHECK OK, 0 failed**.
+`npm run smoke:live:exe` on `dist/Bop-0.1.5-portable.exe`: **LIVE CHECK OK, 0 failed**, 13/13 steps —
+dashboard IPC, the bubble window, a loaded space with its notification bridge, a page's own
+`new Notification(...)` reaching the card, an unread tab title, a watched page changed in place on the
+watcher's own timer, the rendered Alerts page, the bubble badge, both pane throttling checks, the tray,
+and the start-at-login entry toggled off and on (portable: registered → false → true).
+
+Machine-readable runs: `live-check-015.json` (packaged 0.1.5). The source run wrote to the same scratch
+path and is reported in the summary line above.
+
+## Real-mouse verification
+
+See `dialogs-015.txt`: a copy of the user's own profile, driven with OS-level clicks, before and after —
+the picker that was visible and deaf, the space with no address that opened an empty pane, the Save
+button that sat outside the window. That run is also how the two new smoke steps were designed.

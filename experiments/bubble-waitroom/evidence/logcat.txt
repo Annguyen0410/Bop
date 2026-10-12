@@ -1,0 +1,84 @@
+--------- beginning of crash
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: FATAL EXCEPTION: main
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: Process: com.bop.lab.source, PID: 6057
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: java.lang.IllegalArgumentException: 0|com.bop.lab.source|1|Alpha|10229 Not posted. PendingIntents attached to bubbles must be mutable
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Parcel.createExceptionOrNull(Parcel.java:3371)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Parcel.createException(Parcel.java:3351)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Parcel.readException(Parcel.java:3334)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Parcel.readException(Parcel.java:3278)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.app.INotificationManager$Stub$Proxy.enqueueNotificationWithTag(INotificationManager.java:3695)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.app.NotificationManager.notifyAsUser(NotificationManager.java:880)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.app.NotificationManager.notify(NotificationManager.java:823)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.bop.lab.source.SourceActivity.post(SourceActivity.java:49)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.bop.lab.source.SourceActivity.lambda$onCreate$0$com-bop-lab-source-SourceActivity(SourceActivity.java:23)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.bop.lab.source.SourceActivity$1.run(D8$$SyntheticClass:0)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.bop.lab.source.SourceActivity.lambda$add$0(SourceActivity.java:34)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.bop.lab.source.SourceActivity$9.onClick(D8$$SyntheticClass:0)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.view.View.performClick(View.java:8221)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.view.View.performClickInternal(View.java:8198)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.view.View.-$$Nest$mperformClickInternal(View.java:0)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.view.View$PerformClick.run(View.java:32040)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Handler.handleCallback(Handler.java:1082)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Handler.dispatchMessageImpl(Handler.java:135)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:126)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:295)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:398)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:9572)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:575)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:842)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: Caused by: android.os.RemoteException: Remote stack trace:
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.android.server.am.ActivityManagerService$$ExternalSyntheticBUOutline0.m(R8$$SyntheticClass:0)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.android.server.notification.NotificationManagerService.checkDisqualifyingFeatures(NotificationManagerService.java:10593)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.android.server.notification.NotificationManagerService.enqueueNotificationInternal(NotificationManagerService.java:9895)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.android.server.notification.NotificationManagerService.enqueueNotificationInternal(NotificationManagerService.java:9675)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 	at com.android.server.notification.NotificationManagerService.enqueueNotificationInternal(NotificationManagerService.java:9660)
+10-07 21:01:23.765  6057  6057 E AndroidRuntime: 
+--------- beginning of main
+10-07 21:02:56.645  7444  7444 I WAITROOM_ROOM: CONNECTED uid=10230
+10-07 21:03:01.993  7482  7482 I WAITROOM_SOURCE: POST Alpha seq=2 uid=10229
+10-07 21:03:02.254  7444  7444 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:04:36.502  7482  7482 I WAITROOM_SOURCE: POST Beta seq=1 uid=10229
+10-07 21:04:36.774  7444  7444 I WAITROOM_ROOM: POST Beta bubbleFlag=true
+10-07 21:05:36.754  7444  7444 I WAITROOM_ROOM: SNOOZE_REQUEST Alpha ms=25000
+10-07 21:05:37.091  7444  7444 I WAITROOM_ROOM: REMOVED Alpha reason=18
+10-07 21:06:02.049  7444  7444 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:08:07.693  7444  7444 I WAITROOM_ROOM: SNOOZE_REQUEST Alpha ms=25000
+10-07 21:08:07.724  7444  7444 I WAITROOM_ROOM: REMOVED Alpha reason=18
+10-07 21:08:08.913  7482  7482 I WAITROOM_SOURCE: POST Alpha seq=3 uid=10229
+10-07 21:08:14.199  7444  7444 I WAITROOM_ROOM: NOTIFY_AS_SOURCE_DENIED Caller com.bop.lab.room:10230 cannot post for pkg com.bop.lab.source in user 0
+10-07 21:08:20.619  7444  7444 I WAITROOM_ROOM: ORIGINAL_PENDING_INTENT_SENT
+10-07 21:08:32.965  7444  7444 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:09:02.247  7444  7444 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:09:03.511  9749  9749 I WAITROOM_SOURCE: OPEN_CHAT Alpha uid=10229
+10-07 21:11:26.859 10304 10304 I WAITROOM_ROOM: CONNECTED uid=10230
+10-07 21:12:03.343 10304 10304 I WAITROOM_ROOM: SNOOZE_REQUEST Alpha ms=120000
+10-07 21:12:03.468 10304 10304 I WAITROOM_ROOM: REMOVED Alpha reason=18
+10-07 21:12:05.194  9749  9749 I WAITROOM_SOURCE: POST Alpha seq=4 uid=10229
+10-07 21:12:08.248 10304 10304 I WAITROOM_ROOM: NOTIFY_AS_SOURCE_DENIED Caller com.bop.lab.room:10230 trying to post for invalid pkg com.bop.lab.source in user 0
+10-07 21:12:12.269 10304 10304 I WAITROOM_ROOM: ORIGINAL_PENDING_INTENT_SENT_WITH_VISIBLE_SENDER_OPT_IN
+10-07 21:12:12.299  9749  9749 I WAITROOM_SOURCE: OPEN_CHAT Alpha uid=10229
+10-07 21:14:02.441 10694 10694 I WAITROOM_ROOM: CONNECTED uid=10230
+10-07 21:14:03.615 10694 10694 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:14:07.416 10694 10694 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:15:56.809 10694 10694 I WAITROOM_ROOM: SNOOZE_REQUEST Alpha ms=25000
+10-07 21:15:56.968 10694 10694 I WAITROOM_ROOM: REMOVED Alpha reason=18
+10-07 21:16:22.095 10694 10694 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:16:27.606 10694 10694 I WAITROOM_ROOM: CANCEL_ALPHA_REQUEST destructive-not-parking
+10-07 21:16:31.741 10694 10694 I WAITROOM_ROOM: NOTIFY_AS_SOURCE_DENIED Caller com.bop.lab.room:10230 cannot post for pkg com.bop.lab.source in user 0
+10-07 21:17:48.168 10694 10694 I WAITROOM_ROOM: REMOVED Alpha reason=2
+10-07 21:17:48.630 10694 10694 I WAITROOM_ROOM: REMOVED Beta reason=5
+10-07 21:17:58.865 10694 10694 I WAITROOM_ROOM: SNOOZE_REQUEST Alpha ms=120000
+10-07 21:18:00.017 11383 11383 I WAITROOM_SOURCE: POST Alpha seq=5 uid=10229
+10-07 21:18:00.276 10694 10694 I WAITROOM_ROOM: POST Alpha bubbleFlag=true
+10-07 21:18:06.023 10694 10694 I WAITROOM_ROOM: NOTIFY_AS_SOURCE_DENIED Caller com.bop.lab.room:10230 cannot post for pkg com.bop.lab.source in user 0
+10-07 21:18:10.079 10694 10694 I WAITROOM_ROOM: ORIGINAL_PENDING_INTENT_SENT_WITH_VISIBLE_SENDER_OPT_IN
+10-07 21:18:10.160 11383 11383 I WAITROOM_SOURCE: OPEN_CHAT Alpha uid=10229
+10-07 21:19:15.612 11383 11383 I WAITROOM_SOURCE: POST Beta seq=2 uid=10229
+10-07 21:19:15.925 10694 10694 I WAITROOM_ROOM: POST Beta bubbleFlag=true
+10-07 21:19:19.961 10694 10694 I WAITROOM_ROOM: SNOOZE_REQUEST Alpha ms=120000
+10-07 21:19:19.975 10694 10694 I WAITROOM_ROOM: REMOVED Alpha reason=18
+10-07 21:19:22.137 11383 11383 I WAITROOM_SOURCE: POST Alpha seq=6 uid=10229
+10-07 21:19:27.393 10694 10694 I WAITROOM_ROOM: NOTIFY_AS_SOURCE_DENIED Caller com.bop.lab.room:10230 cannot post for pkg com.bop.lab.source in user 0
+10-07 21:19:31.349 10694 10694 I WAITROOM_ROOM: ORIGINAL_PENDING_INTENT_SENT_WITH_VISIBLE_SENDER_OPT_IN
+10-07 21:19:31.395 11383 11383 I WAITROOM_SOURCE: OPEN_CHAT Alpha uid=10229

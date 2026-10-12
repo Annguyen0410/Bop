@@ -1,0 +1,33 @@
+# Full JVM unit suite: ./gradlew :app:testDebugUnitTest
+# Gradle prints no per-test counts on success, so the totals below are parsed from the JUnit XML
+# that same run wrote (app/build/test-results/testDebugUnitTest/*.xml).
+
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDebugUnitTest
+
+BUILD SUCCESSFUL in 6s
+24 actionable tasks: 2 executed, 22 up-to-date
+Configuration cache entry reused.
+
+--- totals across app/build/test-results/testDebugUnitTest/*.xml ---
+tests=124 skipped=0 failures=0 errors=0
+
+--- SpaceScanTest cases ---
+"aFirstReadingIsABaselineAndOnlyAGrowingUnmutedCountIsNews"
+"aPayloadThatLosesItsMuteFieldIsARefusalNotAnAssumption"
+"anAdapterThatThrowsIsRecordedByClassNameAndDoesNotStopTheSweep"
+"aSourceThatCannotSeeMuteStateSaysSoInsteadOfPretending"
+"removingASpaceMidSweepNeitherSkipsNorRepeatsAnother"
+"theTickIsTenSecondsAndAFullSweepIsBoundedByTheSpaceCount"
+"mutedThreadsAreSubtractedBeforeAnythingIsClaimedAsNews"
+"theSweepVisitsEverySpaceInTurnAndWrapsAround"
+"aDecodedPageReadingDrivesTheSweepWithMuteFiltering"
+"mutingMoreThanTheSiteReportsCannotInventANegativeNumber"
+"anEmptySlotListIsNotAStep"
+"aPageThatCannotBeReadIsNotAReadingAndChangesNothing"
+"thePagePayloadIsExactlyTheOneTheInjectedReaderWrites"
+"aCountThatCannotExistIsRejectedInsteadOfBeingClampedIntoACard"
+"anAbsurdBadgeIsCappedExactlyLikeTheTitlePath"
+"forgettingASpaceMakesItsNextReadingABaselineAgain"
+"eachSpaceKeepsItsOwnBaselineInsideOneSweep"
+"theStatusLineStaysOneShortLineInTheKeyValueFile"

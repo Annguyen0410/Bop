@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <queries>
+        <package android:name="com.facebook.orca" />
+    </queries>
+    <application
+        android:name=".HubApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:theme="@style/Theme.TwoAccMess">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.TwoAccMess"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".HubPanelActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TwoAccMess.Panel"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebAActivity"
+            android:process=":messenger_a"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.a"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebBActivity"
+            android:process=":messenger_b"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.b"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebCActivity"
+            android:process=":messenger_c"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.c"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebDActivity"
+            android:process=":messenger_d"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.d"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebEActivity"
+            android:process=":messenger_e"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.e"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebFActivity"
+            android:process=":messenger_f"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.f"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebGActivity"
+            android:process=":messenger_g"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.g"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebHActivity"
+            android:process=":messenger_h"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.h"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebIActivity"
+            android:process=":messenger_i"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.i"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebJActivity"
+            android:process=":messenger_j"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.j"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebKActivity"
+            android:process=":messenger_k"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.k"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebLActivity"
+            android:process=":messenger_l"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.l"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebMActivity"
+            android:process=":messenger_m"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.m"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebNActivity"
+            android:process=":messenger_n"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.n"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebOActivity"
+            android:process=":messenger_o"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.o"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".MessengerWebPActivity"
+            android:process=":messenger_p"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.example.twoaccmess.web.p"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".DynamicWebActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".HubAlertActionReceiver"
+            android:exported="false" />
+        <!--
+            Runs in the hub process, not in the web slot's: an open session in another process sends
+            its own page-title reading here so the hub card and badge can update in realtime.
+        -->
+        <receiver
+            android:name=".WebAlertReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".HubBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+        <service
+            android:name=".HubNotificationListener"
+            android:label="@string/notification_access_label"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".FloatingHubService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started small draggable messaging hub bubble that opens independent foreground web sessions or optional native notification tools; no background scraping or Messenger process keepalive. User can stop from the overlay or notification." />
+        </service>
+    </application>
+</manifest>

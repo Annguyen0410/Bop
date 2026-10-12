@@ -1,0 +1,130 @@
+Bop Desktop 0.1.7 — theme colours, a bubble you can park, quieter notifications, a menu worth opening
+=====================================================================================================
+
+Reported, from the packaged 0.1.5/0.1.6 the user was running:
+
+  "adjust the text colours to the theme — if the theme is dark, make the text light and the other way
+   round; let the bubble on the interface be moved anywhere; and once it has notified me, if it is still
+   exactly the same it must not notify again — only notify when there is something new, so the app stops
+   spamming me; and redo this chat bubble's panel, put it in the middle and make it nicer."
+
+Everything below was measured, not assumed. Windows 10.0.19045, Electron 38.8.6, Chrome/140.0.7339.249.
+
+1. The text really did not follow the theme — and it was measurable
+-------------------------------------------------------------------
+Method: `tools/contrast.js`, run through the app's own DevTools port on every window that holds text
+(`node tools/cdp-eval.js <port> "<target>" "$(cat tools/contrast.js)"`). It walks every visible element
+with text, resolves the colour it actually ends up on (through transparent backgrounds) and reports
+anything below the WCAG 4.5:1 ratio.
+
+BEFORE, 0.1.6, dark theme, "A new little space" dialog open:
+
+  {"theme":"dark","colorScheme":"normal","belowThreshold":6,"worst":[
+    {"ratio":1.36,"element":"app-name","color":"rgb(0, 0, 0)","background":"rgb(38,34,53)","text":"Messenger"},
+    … the whole grid: Facebook, Instagram, WhatsApp, TikTok, Telegram ]}
+
+A `button` does not inherit `color`, and nothing set it on `.app-choice`, so every app name in the picker
+was black text on a #262235 tile — 1.36:1, i.e. invisible. `.ghost`, `.primary`, `.nav` and `.space-row`
+were each fine because each sets its own colour, which is why only that one grid was affected.
+
+Two more theme defects found the same way:
+  * `color-scheme` computed to `normal` in dark theme, so Chromium drew light scrollbars, carets and
+    native controls inside dark windows.
+  * With the app set to "System colours", a Windows light/dark switch never reached an open window: the
+    theme was resolved inside each renderer on its next render, and nothing triggered one.
+
+AFTER, 0.1.7, the delivered file, six surfaces (dashboard / modal / bubble menu × dark / light):
+
+  dark  dashboard: belowThreshold 0, colorScheme dark
+  dark  modal:     belowThreshold 0, colorScheme dark
+  dark  menu:      belowThreshold 0, colorScheme dark
+  light dashboard: belowThreshold 0, colorScheme light
+  light modal:     belowThreshold 0, colorScheme light
+  light menu:      belowThreshold 0, colorScheme light
+
+Fixes: `button { color: inherit }` (with `.app-choice { color: var(--text) }` stated as well, because it
+was the actual element); `color-scheme: light` on `:root` and `dark` under `[data-theme='dark']`; and one
+`nativeTheme.on('updated')` in the main process that re-broadcasts the snapshot, so the OS switch reaches
+every window — asserted in the smoke as step `theme-follows-system`, which drives the real Electron event
+(`nativeTheme.themeSource`) and reads the theme back from the rendered dashboard:
+
+  {"light":{"dashboard":"light","colourScheme":"light"},"dark":{"dashboard":"dark","colourScheme":"dark"}}
+
+Screenshots: [modal-dark-017.png](modal-dark-017.png), [dashboard-light-017.png](dashboard-light-017.png).
+
+2. The bubble now stays where it is dropped
+-------------------------------------------
+Release used to snap the bubble flush to the nearest side edge (`docking.dock`). Now the drop position is
+kept and the screen edge is the only correction (`docking.free`), on both axes.
+
+Asserted by driving the real window, not the maths: the smoke moves the bubble window to the middle of
+the work area and lets the live `move` handler settle it —
+
+  smoke step bubble-release-free: {"wanted":{"x":997,"y":505},"got":{"x":997,"y":505},"stayed":true,"size":{"width":64,"height":64}}
+  smoke step bubble-prefs:  {"size":48,"spot":{"x":997,"y":505},…}  (a resize does not move it)
+  smoke step bubble-restore:{"stored":{"x":0.519,"y":0.489},"restored":{"x":997,"y":505},"keptSpot":true}
+  smoke step docking:       {"dropped":{"x":377,"y":512},"pulledTopLeft":{"x":0,"y":0},"pulledBottomRight":{"x":1856,"y":968}}
+
+`settleBubble` also takes the frame back if Windows snapped the window (dragging a frameless window into
+the top edge is an Aero Snap gesture, and a snapped window is no longer a 64px circle).
+
+3. A notification that says the same thing twice is not a second notification
+-----------------------------------------------------------------------------
+New pure module `src/main/notify-log.js`: only the most recent notification of a space is remembered (the
+space, kind, title and body — not the tag), and only for that space. Same words again → no second ding and
+no second card; anything the user would read differently → notify; the same words after a different event
+→ notify again, because that is a new event.
+
+Measured through the real path (a page raising `new Notification(...)`, with its own event id each time,
+so the monitor cannot hide it):
+
+  smoke step notification-repeat-silent:    {"arrivedAgain":true,"attemptsBefore":1,"attemptsAfter":1,"cardBefore":3,"cardAfter":3}
+  smoke step notification-changed-notifies: {"attempts":2,"card":4,"body":"Prolific · 5 places left"}
+
+`arrivedAgain` proves the repeat really reached Bop; the unchanged native-attempt counter and card count
+prove nothing interrupted the user. The alert itself is still recorded in the Alerts list — it is the
+interruption that is skipped. Nothing is persisted, so a relaunch re-arms every space.
+
+4. The space menu: it was not only unclearly placed, its own stylesheet was blocked
+----------------------------------------------------------------------------------
+Two separate defects:
+  * **Its CSS never ran.** `menu.html` declared `style-src 'self'` and kept its rules in an inline
+    `<style>` block, which that policy blocks. Measured on 0.1.6: `document.styleSheets` held only
+    styles.css, `.menu` computed to `display: block` and `.menu-foot` as `border-top: 0px`. The panel was
+    a raw square window with an unstyled list — the "ugly" panel in the report. The rules now live in
+    `src/renderer/menu.css`, loaded as a file.
+  * **It was anchored to the bubble.** Measured on 0.1.6 with the bubble in the top-left corner: the panel
+    was clamped against the left edge and its first word was cut off. The bubble can now be parked
+    anywhere, so "beside the bubble" has no predictable side either. It is centred on the display instead
+    (`docking.centered`), 340px wide, with its own rounded card and shadow (the window is transparent; on
+    this Windows build a frameless window gets no rounded corners of its own).
+
+  smoke step bubble-menu-centred: {"bounds":{"x":790,"y":355,"width":340,"height":322},"offCentre":0,"theme":"dark"}
+  packaged menu window:           790,333 340x366 — centred, initialTheme dark, panel radius 20px, 2 stylesheets, colourScheme dark
+
+Screenshots: [menu-dark-017.png](menu-dark-017.png), [menu-light-017.png](menu-light-017.png).
+
+5. What was run, on which artifact
+----------------------------------
+  unit tests      npm test                                 74 passed, 0 failed
+  source smoke    electron . --bop-smoke                    37 steps, ok
+  packaged smoke  dist/win-unpacked/Bop.exe --bop-smoke      37 steps, ok, 4 alerts, packaged:true
+  live check      npm run smoke:live:exe (the portable file) 13/13, 0 failed
+  contrast audit  six surfaces on the delivered file         0 below 4.5:1
+  reports         packaged-smoke-017.json, live-check-017.json, source-smoke-017.json
+
+  artifact        desktop/dist/Bop-0.1.7-portable.exe — 85 202 841 bytes,
+                  sha256 5c1f8877a0526cda7c5255fa1c1570b95a10d5cac1b461128720c1b06fb0f2b7
+  delivered       C:\Users\nguye\OneDrive\Desktop\Bop-0.1.7-portable.exe — same sha256
+
+Limits
+------
+- No real panel or messenger account was signed in: the panel work in 0.1.6 was verified against
+  app.usercrowd.com and that evidence still stands, but a logged-in session is still unverified.
+- The free bubble placement was verified by moving the real window and by the drag maths; a human mouse
+  drag with the OS pointer was not automated here.
+- The OS light/dark switch was driven through Electron's `nativeTheme.themeSource`, which is the same
+  event Windows sends — the machine's own Windows theme was deliberately not flipped.
+- The menu's transparency is taken from the app's own window capture; a screen-level capture of the
+  shadow over another application was not taken.
+- The artifacts are unsigned, so SmartScreen warns on the first launch.

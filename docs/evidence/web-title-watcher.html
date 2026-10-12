@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>watcher harness</title>
+<body style="font:14px system-ui;padding:16px">
+<h1>WebUnread.SCRIPT + STOP_SCRIPT, running in a real browser engine</h1>
+<p>These are the exact scripts the Android app injects, extracted from <code>WebUnread.kt</code> and
+evaluated from the DOM, next to a stand-in for the Android bridge. Everything below is a live reading:
+<em>install</em> = a page load, <em>stop</em> = leaving the space, <em>resume</em> = coming back.</p>
+<form onsubmit="return false">
+  <input id="t" value="(3) Messenger" size="30"> <button id="set">set document.title</button>
+  <button id="stopbtn">stop (leave the space)</button>
+  <button id="resumebtn">resume (back on screen)</button>
+</form>
+<p id="state"></p>
+<pre id="out">waiting for a reading...</pre>
+<script id="bop-watch" type="text/plain">
+(function () {
+  if (window.__bopTitleTimer) return;
+  window.__bopTitleWatch = true;
+  var seen = null;
+  function report() {
+    if (window.__bopTitleWatch !== true) return;
+    var title = document.title || '';
+    if (title === seen) return;
+    seen = title;
+    try { window.BopTabTitle.report(title); } catch (error) {}
+  }
+  report();
+  window.__bopTitleTimer = setInterval(report, 3000);
+})();
+</script>
+<script id="bop-stop" type="text/plain">
+(function () {
+  window.__bopTitleWatch = false;
+  if (window.__bopTitleTimer) { clearInterval(window.__bopTitleTimer); window.__bopTitleTimer = null; }
+})();
+</script>
+<script>
+  window.__reports = [];
+  window.BopTabTitle = { report: function (title) { window.__reports.push(title); draw(); } };
+  function draw() {
+    document.getElementById('out').textContent = 'reports = ' + JSON.stringify(window.__reports);
+    document.getElementById('state').textContent = 'timer installed: ' + (window.__bopTitleTimer ? 'yes' : 'no')
+      + ' · watching: ' + (window.__bopTitleWatch === true);
+  }
+  window.__install = function () { eval(document.getElementById('bop-watch').textContent); draw(); return !!window.__bopTitleTimer; };
+  window.__stop = function () { eval(document.getElementById('bop-stop').textContent); draw(); return window.__bopTitleTimer === null; };
+  document.getElementById('set').onclick = function () { document.title = document.getElementById('t').value; };
+  document.getElementById('stopbtn').onclick = function () { window.__stop(); };
+  document.getElementById('resumebtn').onclick = function () { window.__install(); };
+  window.__install();
+  draw();
+</script>
+</body>

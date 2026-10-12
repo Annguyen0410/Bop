@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark counterpart of Theme.TwoAccMess. The Compose cockpit and the browser/overlay palettes
+         follow the in-app appearance choice, but the platform window (panel dialog, splash, system
+         bars) is themed by Android itself, so the phone's night mode needs its own entry here. -->
+    <style name="Theme.TwoAccMess" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:colorBackground">@color/window_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="Theme.TwoAccMess.Panel" parent="android:Theme.Material.Dialog.NoActionBar">
+        <item name="android:windowMinWidthMajor">94%</item>
+        <item name="android:windowMinWidthMinor">94%</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:colorBackground">#FF141A2E</item>
+    </style>
+</resources>

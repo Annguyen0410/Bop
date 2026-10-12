@@ -1,0 +1,637 @@
+SERVICE com.android.systemui/.SystemUIService d14a4a5 pid=924 user=0
+  Client:
+    Dump starting: 10-07 21:15:58.423
+
+    com.android.systemui.wmshell.WMShell:
+    ----------------------------------------------------------------------------
+    BackAnimationController state:
+      mBackGestureStarted=false
+      mPostCommitAnimationInProgress=false
+      mShouldStartOnNextMoveEvent=true
+      mPointerPilfered=false
+      mRequirePointerPilfer=true
+      mCurrentTracker state:
+        BackTouchTracker state:
+          mState=INITIAL
+          mTriggerBack=false
+      mQueuedTracker state:
+        BackTouchTracker state:
+          mState=INITIAL
+          mTriggerBack=false
+
+    BubbleController state:
+      currentUserId= 0
+      isStatusBarShade= true
+      isShowingAsBubbleBar= false
+      launcherHasBubbleBar= false
+      bubbleStateListenerSet= false
+      stackViewSet= true
+      layerViewSet= false
+      isPinningEnabled= false
+      isScrimEnabled= true
+      areAppBubblesSupported= true
+
+    BubbleData state:
+      selected: 0|com.bop.lab.source|1|Alpha|10229
+      expanded: false
+    Stack bubble count: 2
+    key: 0|com.bop.lab.source|1|Alpha|10229
+      showInShade:   false
+      showDot:       false
+      showFlyout:    false
+      lastActivity:  1791432847130
+      desiredHeight: 420
+      suppressNotif: true
+      autoExpand:    false
+      isDismissable: true
+      bubbleMetadataFlagListener null?: false
+      mCurrentTransition null?: true
+      isConvertingToBar: false
+      isConvertingToFloating: false
+      isCleanupDeferred: false
+      BubbleExpandedView:
+        taskId: 85
+        stackView: com.android.wm.shell.bubbles.BubbleStackView{2cd93c0 VFE...... ........ 0,0-1080,2400}
+        contentVisibility: false
+        isAnimating: false
+        tv-alpha: 0.0
+        tv-viewVis: 0
+        tv-clipBounds: null
+        tv-cornerRadius: 74.0
+        tv-zOrderedOnTop: false
+        v-alpha: 1.0
+        v-viewVis: 0
+        v-cornerRadius: 74.0
+        isClipping: false
+        clip: left=0, top=0, right=0, bottom=0
+    key: 0|com.bop.lab.source|2|Beta|10229
+      showInShade:   true
+      showDot:       true
+      showFlyout:    true
+      lastActivity:  1791432276830
+      desiredHeight: 420
+      suppressNotif: false
+      autoExpand:    false
+      isDismissable: true
+      bubbleMetadataFlagListener null?: false
+      mCurrentTransition null?: true
+      isConvertingToBar: false
+      isConvertingToFloating: false
+      isCleanupDeferred: false
+      BubbleExpandedView:
+        taskId: -1
+        stackView: com.android.wm.shell.bubbles.BubbleStackView{2cd93c0 VFE...... ........ 0,0-1080,2400}
+        contentVisibility: false
+        isAnimating: false
+        tv-alpha: 1.0
+        tv-viewVis: 0
+        tv-clipBounds: null
+        tv-cornerRadius: 74.0
+        tv-zOrderedOnTop: false
+        v-alpha: 1.0
+        v-viewVis: 0
+        v-cornerRadius: 74.0
+        isClipping: false
+        clip: left=0, top=0, right=0, bottom=0
+    Overflow bubble count: 0
+    SummaryKeys: 0
+
+    Stack view state:
+      bubbles on screen:       
+    => Bubble{act=1791432847130, showInShade=0, key=0|com.bop.lab.source|1|Alpha|10229, vis=0, alpha=1.000000}
+       Bubble{act=1791432276830, showInShade=1, key=0|com.bop.lab.source|2|Beta|10229, vis=0, alpha=1.000000}
+      gestureInProgress:       false
+      showingDismiss:          false
+      isExpansionAnimating:    false
+      expandedContainerVis:    0
+      expandedContainerAlpha:  1.0
+      expandedContainerMatrix: null
+      stack visibility :       0
+      temporarilyInvisible:    false
+      expandedViewTemporarilyHidden: false
+      imeVisible:              false
+      gesture tracker:         null
+      is showing overflow:     true
+    StackAnimationController state:
+      isActive:             true
+      restingStackPos:      PointF(-7.0, 386.47757)
+      currentStackPos:      PointF(-7.0, 386.47757)
+      isMovingFromFlinging: false
+      withinDismiss:        false
+      firstBubbleSpringing: false
+    ExpandedAnimationController state:
+      isActive:          false
+      animatingExpand:   false
+      animatingCollapse: false
+      springingBubble:   false
+    ExpandedViewAnimationController:
+      expandedView: com.android.wm.shell.bubbles.BubbleExpandedView{f72cf7a V.E...... ......ID 42,13-1038,1343 #7f0a01b4 app:id/bubble_expanded_view}
+      collapsedAmount: 0.0
+      notifiedAboutThreshold: false
+      collapseAnimation running: false
+      backToExpandedAnimation=null
+      bottomClipAnim=null
+    Expanded bubble state:
+      expandedBubbleKey: 0|com.bop.lab.source|1|Alpha|10229
+      expandedViewVis:    0
+      expandedViewAlpha:  1.0
+      expandedViewTaskId: 85
+      activityViewVis:    0
+      activityViewAlpha:  0.0
+
+    BubbleImpl.CachedState state:
+    mIsStackExpanded: false
+    mSelectedBubbleKey: 0|com.bop.lab.source|1|Alpha|10229
+    mSuppressedBubbleKeys: 1
+       suppressing: 0|com.bop.lab.source|1|Alpha|10229
+    mSuppressedGroupToNotifKeys: 0
+    mNoteBubbleTaskIds: []
+
+    TaskViewTransitions state:
+      Pending transitions count: 0
+      TaskViewRepository state:
+        task view count: 2
+          task view: TaskViewTaskController:85
+            is visible: false
+            bounds: Rect(42, 296 - 1038, 1398)
+          task view: TaskViewTaskController:null
+            is visible: false
+            bounds: Rect(0, 0 - 0, 0)
+    BubblePositioner state:
+      mScreenRect= Rect(0, 0 - 1080, 2400)
+      mPositionRect= Rect(0, 63 - 1080, 2337)
+      mInsets= Insets{left=0, top=63, right=0, bottom=63}
+      mImeVisible= false
+      mImeHeight= 0
+      mMaxBubbles= 5
+      mRestingStackPosition= PointF(-7.0, 386.47757)
+      mShowingInBubbleBar= false
+      mBubbleBarLocation= DEFAULT
+      mBubbleBarTopOnScreen= 0
+
+    Bubbles events history:
+
+
+    DesktopDisplayModeController
+      targetWindowingModeForDefaultDisplay=1
+      canDesktopFirstModeBeEnabledOnDefaultDisplay=false
+      isDefaultDisplayDesktopEligible=false
+      isExtendedDisplayEnabled=false
+      hasExternalDisplay=false
+      FORCE_DESKTOP_FIRST_ON_DEFAULT_DISPLAY=false
+      hasAnyTouchpadDevice=false
+      hasAnyPhysicalKeyboardDevice=true
+      isDesktopFirstDeviceState=false
+      Current Desktop Display Modes:
+        Display#0 isDesktopFirst=false
+
+    DesktopModeWindowDecorViewModel
+      DesktopModeStatus=true
+      mTransitionDragActive=false
+      mEventReceiversByDisplay={}
+      mGestureExclusionTracker={0=SkRegion((0,386,152,544))}
+
+    DesktopTasksController
+    DesktopConfig
+    maxTaskLimit=0
+    maxTaskLimit config override=0maxTaskLimit sysprop=null
+    showAppHandle config override=false
+      DesktopUserRepositories:
+          currentUserId=0
+          DesktopRepository
+            userId=0
+            activeTasksListeners=2
+            visibleTasksListeners=1
+            rememberedBoundsRatioByPackageName:
+    DesktopExperienceFlags
+      Status: disabled
+      Flag com.android.window.flags.defer_resume_focus_in_non_focused_window                               - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_add_window_decoration_to_all_tasks                              - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_auto_recovery_from_self_kill                                    - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_auto_rotate_on_slate_state                                      - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_bug_fixes_for_secondary_display                                 - true (default: true, overridable: true)
+      Flag com.android.window.flags.default_desk_without_warmup_migration                                  - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_desktop_first_based_default_to_desktop_bugfix                   - true (default: true, overridable: true)
+      Flag com.android.window.flags.enable_desktop_taskbar_on_freeform_displays                            - true (default: true, overridable: true)
+      Flag com.android.server.display.feature.flags.enable_display_content_mode_management                 - true (default: true, overridable: true)
+      Flag com.android.window.flags.enable_display_disconnect_interaction                                  - true (default: true, overridable: true)
+      Flag com.android.window.flags.enable_display_reconnect_interaction                                   - true (default: true, overridable: true)
+      Flag com.android.window.flags.enable_drawing_app_handle                                              - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_freeform_box_shadows_v2                                         - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_fullscreen_window_controls                                      - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_game_controls_handle_menu_entry                                 - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_interaction_dependent_tab_tearing_bounds                        - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_interactive_picture_in_picture                                  - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_multiple_desktops_default_activation_in_desktop_first_displays  - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_non_default_display_split_bugfix                                - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_per_display_desktop_wallpaper_activity                          - true (default: true, overridable: true)
+      Flag com.android.window.flags.enable_projected_display_desktop_mode                                  - true (default: true, overridable: true)
+      Flag com.android.window.flags.reenable_app_handle_color_animations                                   - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_request_fullscreen_refactor                                     - false (default: false, overridable: false)
+      Flag com.android.window.flags.enable_require_movable_task_api                                        - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_sys_decors_callbacks_via_wm                                     - true (default: true, overridable: true)
+      Flag com.android.window.flags.enable_taskbar_connected_displays                                      - true (default: true, overridable: true)
+      Flag com.android.window.flags.enable_window_decoration_refactor                                      - true (default: true, overridable: false)
+      Flag com.android.window.flags.enable_window_repositioning_api                                        - true (default: true, overridable: false)
+      Flag com.android.graphics.flags.use_resources_from_context_to_create_drawable_icons                  - true (default: true, overridable: true)
+    DesktopExperienceFlags.DesktopExperienceFlag
+      Flag com.android.window.flags.enable_sys_decors_callbacks_via_wm  - true (default: true, overridable: true)
+
+    DragAndDropController
+      listeners=3
+      Per display:
+        displayId=0
+        hasDrawn=false
+        dragHandler=null
+        activeDragCount=0
+        DragLayout:
+          mIsLeftRightSplitInPortrait=false
+          mIsLeftRightSplit=false
+          mDisplayMargin=42
+          mDividerSize=26
+          mIsShowing=false
+          mHasDropped=false
+          mCurrentTarget=null
+          mInsets=Insets{left=0, top=0, right=0, bottom=0}
+          mTouchableRegion=SkRegion()
+
+    FocusTransitionObserver:
+        currentFocusedDisplayId=0
+        currentFocusedTaskOnDisplay:
+            Display #0: taskId=84 topActivity=ComponentInfo{com.bop.lab.room/com.bop.lab.room.RoomActivity}
+
+
+    OneHandedController
+      mOffSetFraction=0.4
+      mLockedDisabled=false
+      mUserId=0
+      isShortcutEnabled=false
+      mIsSwipeToNotificationEnabled=false
+    OneHandedDisplayAreaOrganizer
+      mDisplayLayout.rotation()=0
+      mDisplayAreaTokenMap={}
+      mDefaultDisplayBounds=Rect(0, 0 - 1080, 2400)
+      mIsReady=false
+      mLastVisualDisplayBounds=Rect(0, 0 - 1080, 2400)
+      mLastVisualOffset=0.0
+    OneHandedAnimationControllerstates: 
+      mAnimatorMap={}
+    OneHandedSurfaceTransactionHelperstates: 
+      mEnableCornerRadius=true
+      mCornerRadiusAdjustment=0.0
+      mCornerRadius=0.0
+    OneHandedTouchHandler
+      mLastUpdatedBounds=Rect(0, 0 - 0, 0)
+    OneHandedTimeoutHandler
+      sTimeout=8
+      sListeners=[com.android.wm.shell.onehanded.OneHandedController$$ExternalSyntheticLambda10@f398a0e]
+    OneHandedState
+      sCurrentState=0
+    OneHandedTutorialHandler
+      isAttached=false
+      mCurrentState=0
+      mDisplayBounds=Rect(0, 0 - 1080, 2400)
+      mTutorialAreaHeight=960
+      mAlphaTransitionStart=576.0
+      mAlphaAnimationDurationMs=600
+    BackgroundWindowManager
+      mDisplayBounds=Rect(0, 0 - 1080, 2400)
+      mViewHost=null
+      mLeash=null
+      mBackgroundView=null
+    OneHandedAccessibilityUtil
+      mPackageName=com.android.systemui
+      mDescription=null
+    OneHandedSettingsUtil
+      isOneHandedModeEnable=false
+      isSwipeToNotificationEnabled=false
+      oneHandedTimeOut=8
+      tapsAppToExit=true
+      shortcutActivated=false
+      tutorialShownCounts=0
+
+    SystemPerformanceHinter:
+      Active sessions (0):
+
+    PipController
+      PipUtils
+        isPipUmoExperienceEnabled=false
+        isPip2ExperimentEnabled=true
+          enablePip2=true
+          enablePip2OnTv=false
+      PipBoundsAlgorithm
+        mDefaultAspectRatio=1.777778
+        mMinAspectRatio=0.41841003
+        mMaxAspectRatio=2.39
+        mDefaultStackGravity=85
+        mSnapAlgorithmcom.android.wm.shell.common.pip.PipSnapAlgorithm@4eb0bc5
+      PipBoundsState
+        mBounds=Rect(0, 0 - 0, 0)
+        mNormalBounds=Rect(0, 0 - 0, 0)
+        mExpandedBounds=Rect(0, 0 - 0, 0)
+        mMovementBounds=Rect(0, 0 - 0, 0)
+        mNormalMovementBounds=Rect(0, 0 - 0, 0)
+        mExpandedMovementBounds=Rect(0, 0 - 0, 0)
+        mLastPipComponentName=null
+        mAspectRatio=1.777778
+        mStashedState=0
+        mStashOffset=84
+        mIsImeShowing=false
+        mImeHeight=0
+        mIsShelfShowing=false
+        mShelfHeight=0
+        mHasUserMovedPip=false
+        mHasUserResizedPip=false
+        mMinSize=Point(0, 0)
+        mMaxSize=Point(0, 0)
+        mBoundsScale0.0
+        mPipReentryState=null
+        PipBoundsState$LauncherState
+            getAppIconSizePx=173
+        PipBoundsState$MotionBoundsState
+          mBoundsInMotion=Rect(0, 0 - 0, 0)
+          mAnimatingToBounds=Rect(0, 0 - 0, 0)
+          mOverrideMinSize=null
+          mOverridableMinSize=126
+          mDefaultMinSize=284
+          mDefaultSizePercent=0.6
+          mMinimumSizePercent=0.5
+          mOptimizedAspectRatio=0.5625
+      PipDisplayLayoutState
+        mDisplayId=0
+        getDisplayBounds=Rect(0, 0 - 1080, 2400)
+        getDisplayLayout#densityDpi=420
+        mScreenEdgeInsets=Point(42, 42)
+        mEnableNavigationBarsInsets=false
+        mNavigationBarsInsets=Insets{left=0, top=0, right=0, bottom=63}
+      PipTransitionState
+        mState=undefined
+        mInFixedRotation=false
+        mIsDisplayChangeScheduled=false
+
+    PipTouchHandler
+      mMenuState=0
+      mIsImeShowing=false
+      mImeHeight=0
+      mIsShelfShowing=false
+      mShelfHeight=0
+  mSavedSnapFraction=-1.0
+      mMovementBoundsExtraOffsets=0
+      PipBoundsAlgorithm
+        mDefaultAspectRatio=1.777778
+        mMinAspectRatio=0.41841003
+        mMaxAspectRatio=2.39
+        mDefaultStackGravity=85
+        mSnapAlgorithmcom.android.wm.shell.common.pip.PipSnapAlgorithm@4eb0bc5
+      PipTouchState
+        mAllowTouches=true
+        mAllowInputEvents=true
+        mActivePointerId=0
+        mLastTouchDisplayId=-1
+        mDownTouch=PointF(0.0, 0.0)
+        mDownDelta=PointF(0.0, 0.0)
+        mLastTouch=PointF(0.0, 0.0)
+        mLastDelta=PointF(0.0, 0.0)
+        mVelocity=PointF(0.0, 0.0)
+        mLatestMotionEvent=null
+        mIsUserInteracting=false
+        mIsDragging=false
+        mStartedDragging=false
+        mAllowDraggingOffscreen=false
+      PipResizeGestureHandler
+        mAllowGesture=false
+        mIsAttached=false
+        mIsEnabled=false
+        mEnablePinchResize=true
+        mEnableDragCornerResize=false
+        mThresholdCrossed=false
+        mOhmOffset=0
+
+    RecentTasksController
+     mListener=com.android.wm.shell.recents.RecentTasksController$IRecentTasksImpl$1@508391a
+    Tasks:
+      Desk ID= -1, Desk Display ID=-1, Tasks=[id=84 winMode=fullscreen visReq=true vis=true excluded=false baseIntent=com.bop.lab.room/.RoomActivity], Type=FULLSCREEN, Minimized Task IDs=null, Task Extras={84=ExtraTaskInfo(lastFocusedTime=1175020, cornerRadius=0.0)}
+      Desk ID= -1, Desk Display ID=-1, Tasks=[id=83 winMode=fullscreen visReq=false vis=false excluded=false baseIntent=com.bop.lab.source/.SourceActivity], Type=FULLSCREEN, Minimized Task IDs=null, Task Extras={83=ExtraTaskInfo(lastFocusedTime=957067, cornerRadius=0.0)}
+      Desk ID= -1, Desk Display ID=-1, Tasks=[id=81 winMode=undefined visReq=false vis=false excluded=false baseIntent=com.example.twoaccmess/.MainActivity], Type=FULLSCREEN, Minimized Task IDs=null, Task Extras={81=ExtraTaskInfo(lastFocusedTime=0, cornerRadius=0.0)}
+
+    RootTaskDesksOrganizer
+      launchAdjacentEnabled=true
+      createDeskRootRequests=[]
+      removeDeskRootRequests=[]
+      numOfDeskRoots=0
+      Desk Roots:
+
+    ShellController
+      mUserId=0
+      mProfiles=[UserInfo{0:Owner:4c13}]
+      mDisplayToOverviewVisibleMap={}
+      mConfigChangeListeners=4
+      mLastConfiguration={1.0 310mcc260mnc [en_US] ldltr sw411dp w411dp h914dp 420dpi nrml long compactNeeded port finger qwerty/v/v dpad/v winConfig={ mBounds=Rect(0, 0 - 1080, 2400) mAppBounds=Rect(0, 0 - 1080, 2400) mMaxBounds=Rect(0, 0 - 1080, 2400) mDisplayRotation=ROTATION_0 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_0} s.36 fontWeightAdjustment=0}
+      mKeyguardChangeListeners=8
+      mUserChangeListeners=12
+      mOverviewVisibilityChangeListeners=2
+      mExternalInterfaces={
+      	com.android.wm.shell.splitscreen.ISplitScreen: com.android.wm.shell.splitscreen.SplitScreenController$ISplitScreenImpl@a026c4b
+      	com.android.wm.shell.bubbles.IBubbles: com.android.wm.shell.bubbles.BubbleController$IBubblesImpl@d092628
+      	com.android.wm.shell.common.pip.IPip: com.android.wm.shell.pip2.phone.PipController$IPipImpl@1759f41
+      	com.android.wm.shell.back.IBackAnimation: com.android.wm.shell.back.BackAnimationController$IBackAnimationImpl@2e0cce6
+      	com.android.wm.shell.onehanded.IOneHanded: com.android.wm.shell.onehanded.OneHandedController$IOneHandedImpl@8098227
+      	com.android.wm.shell.shared.IShellTransitions: com.android.wm.shell.transition.Transitions$IShellTransitionsImpl@2de7cd4
+      	com.android.wm.shell.draganddrop.IDragAndDrop: com.android.wm.shell.draganddrop.DragAndDropController$IDragAndDropImpl@2bbee7d
+      	com.android.wm.shell.recents.IRecentTasks: com.android.wm.shell.recents.RecentTasksController$IRecentTasksImpl@e5cd172
+      	com.android.wm.shell.desktopmode.api.IDesktopMode: com.android.wm.shell.desktopmode.DesktopTasksController$IDesktopModeImpl@58219c3
+      	com.android.wm.shell.startingsurface.IStartingWindow: com.android.wm.shell.startingsurface.StartingWindowController$IStartingWindowImpl@c109240
+      }
+
+    ShellTaskOrganizer
+      8 Listeners
+      #7 taskId#85
+        TaskViewTaskController:85
+      #6 taskId#6
+        mHasRootTask=true
+        mVisible=false
+        mHasChildren=false
+      #5 taskId#5
+        mHasRootTask=true
+        mVisible=false
+        mHasChildren=false
+      #4 taskId#4
+        StageCoordinator mDisplayId=0
+          mDividerVisible=false
+          isSplitActive=false
+          mLastActiveStage=-1
+          isSplitVisible=false
+          isLeftRightSplit=false
+            isActive=false
+          MainStage
+            stagePosition=SPLIT_POSITION_TOP_OR_LEFT
+            mHasRootTask=true
+            mVisible=false
+            mHasChildren=false
+          SideStage
+            stagePosition=SPLIT_POSITION_BOTTOM_OR_RIGHT
+            mHasRootTask=true
+            mVisible=false
+            mHasChildren=false
+            SplitLayout:
+            	mAllowLeftRightSplitInPortrait=false
+            	mIsLeftRightSplit=false
+            	mFreezeDividerWindow=false
+            	mDimNonImeSide=true
+            	mDividerPosition=1187
+            	bounds1=[0,0][1080,1187]
+            	dividerBounds=[0,1137][1080,1263]
+            	bounds2=[0,1213][1080,2400]
+      #3 taskId#3
+      #2 taskId#0
+      #1 TASK_LISTENER_TYPE_FULLSCREEN
+        FullscreenTaskListener
+          3 Tasks
+      #0 TASK_LISTENER_TYPE_PIP
+
+      9 Tasks
+      #8 task=85 listener=TaskViewTaskController:85 wmMode=6 pkg=com.bop.lab.source bounds=Rect(42, 296 - 1038, 1398) running=true visible=false focused=false
+      #7 task=84 listener=FullscreenTaskListener wmMode=1 pkg=com.bop.lab.room bounds=Rect(0, 0 - 1080, 2400) running=true visible=true focused=true
+      #6 task=83 listener=FullscreenTaskListener wmMode=1 pkg=com.bop.lab.source bounds=Rect(0, 0 - 1080, 2400) running=true visible=false focused=false
+      #5 task=6 listener=StageTaskListener(mId=SIDE, mVisible=false, mActive=false, mHasRootTask=true, childSize=0) wmMode=6 pkg= bounds=Rect(0, 2400 - 1080, 3600) running=false visible=false focused=false
+      #4 task=5 listener=StageTaskListener(mId=MAIN, mVisible=false, mActive=false, mHasRootTask=true, childSize=0) wmMode=6 pkg= bounds=Rect(0, 0 - 1080, 2400) running=false visible=false focused=false
+      #3 task=4 listener=com.android.wm.shell.splitscreen.StageCoordinator@2578c13 wmMode=1 pkg= bounds=Rect(0, 0 - 1080, 2400) running=false visible=false focused=false
+      #2 task=3 listener=com.android.wm.shell.bubbles.BubbleRootTask@2d6db25 wmMode=6 pkg= bounds=Rect(0, 0 - 1080, 2400) running=false visible=false focused=false
+      #1 task=1 listener=FullscreenTaskListener wmMode=1 pkg=com.google.android.apps.nexuslauncher bounds=Rect(0, 0 - 1080, 2400) running=true visible=false focused=false
+      #0 task=0 listener=com.android.wm.shell.bubbles.BubbleRootTask@2d6db25 wmMode=6 pkg= bounds=Rect(0, 0 - 1080, 2400) running=false visible=false focused=false
+
+      0 Pending launch cookies listeners
+
+      0 Pending task listeners
+
+    SplitScreenController
+    StageCoordinator mDisplayId=0
+      mDividerVisible=false
+      isSplitActive=false
+      mLastActiveStage=-1
+      isSplitVisible=false
+      isLeftRightSplit=false
+        isActive=false
+      MainStage
+        stagePosition=SPLIT_POSITION_TOP_OR_LEFT
+        mHasRootTask=true
+        mVisible=false
+        mHasChildren=false
+      SideStage
+        stagePosition=SPLIT_POSITION_BOTTOM_OR_RIGHT
+        mHasRootTask=true
+        mVisible=false
+        mHasChildren=false
+        SplitLayout:
+        	mAllowLeftRightSplitInPortrait=false
+        	mIsLeftRightSplit=false
+        	mFreezeDividerWindow=false
+        	mDimNonImeSide=true
+        	mDividerPosition=1187
+        	bounds1=[0,0][1080,1187]
+        	dividerBounds=[0,1137][1080,1263]
+        	bounds2=[0,1213][1080,2400]
+
+    TaskStackTransitionObserver:
+      visibleTasks=[]
+
+    ShellTransitions
+    Handlers (ordered by priority):
+      TaskViewTransitions (da49c14)
+      LetterboxAnimationHandler (d1df579)
+      DefaultMixedHandler (b2292be)
+      DisplayDisconnectTransitionHandler (3628f1f)
+      KeyguardTransitionHandler (98c926c)
+      PinnedLayerHandler (ff7035)
+      NormalAppLayerHandler (ef11cca)
+      PipTransition (1aafe3b)
+      DesktopTasksTransitionHandler (be66958)
+      ActivityEmbeddingController (743dab1)
+      StageCoordinator (2578c13)
+      RecentsTransitionHandler (a6c3b96)
+      DesktopMixedTransitionHandler (6414317)
+      DesktopHomeScreenPeekTransitionHandler (704c304)
+      SystemModalsTransitionHandler (98a70ed)
+      ClientFullscreenRequestController (2a87b22)
+      BackAnimationController$BackTransitionHandler (58cf9b3)
+      RemoteTransitionHandler (753468e)
+      SharedSurfaceTransitionHandler (48d0b70)
+      DefaultTransitionHandler (81c147a)
+    Registered Remotes:
+      DesktopWindowLimitUnminimize (22a2ee9)
+      QuickstepLaunchHome (777276e)
+      QuickstepDisplayMove (8d37e0f)
+      LauncherToDream (10f6e9c)
+      overlayBackTransition (fedd0a5)
+    Registered Takeover Remotes:
+      none
+    Observers:
+      DesktopTasksLimiter$MinimizeTransitionObserver
+      BackAnimationController$BackTransitionObserver
+      TaskStackTransitionObserver
+      InteractiveTasksTransitionObserver
+      BubblesTransitionObserver
+      PinnedLayerController
+      RecentsTransitionHandler
+      OverviewToDesktopTransitionObserver
+      StartingWindowController$RemoveStartingObserver
+      PipDisplayChangeObserver
+      NormalAppLayerController
+      DelegateLetterboxTransitionObserver
+      HomeTransitionObserver
+    Pending Transitions:
+      none
+    Ready-during-sync Transitions:
+      none
+    Tracks:
+      Track #0
+      active=null
+      Track #1
+      active=null
+      Track #2
+      active=null
+
+    AppResourceProvider
+      appResourceCache={}
+      existingTasks=[]
+
+    SurfaceControlRegistry
+    ----------------------
+    Listing oldest 28 of 28
+      DefaultTaskDisplayArea#7 (RootTaskDisplayAreaOrganizer.onDisplayAreaAppeared) [1150s ago]
+      Task=1#33 (readFromParcel) [1150s ago]
+      Task=3(Bubbles)#43 (ShellTaskOrganizer.onTaskAppeared) [1150s ago]
+      Display 0 name="Built-in Screen"#27 (RootDisplayAreaOrganizer.onDisplayAreaAppeared) [1150s ago]
+      AppZoomOut:16:16#12 (AppZoomOutDisplayAreaOrganizer.onDisplayAreaAppeared) [1150s ago]
+      AppZoomOut:2:14#6 (AppZoomOutDisplayAreaOrganizer.onDisplayAreaAppeared) [1150s ago]
+      AppZoomOut:0:0#3 (AppZoomOutDisplayAreaOrganizer.onDisplayAreaAppeared) [1150s ago]
+      AppZoomOut:20:22#15 (AppZoomOutDisplayAreaOrganizer.onDisplayAreaAppeared) [1150s ago]
+      WindowedMagnification:0:31#1 (TopLevelZoomDisplayAreaOrganizer.onDisplayAreaAppeared) [1150s ago]
+      Task=6(side)#46 (ShellTaskOrganizer.onTaskAppeared) [1150s ago]
+      Task=4(SplitRoot)#44 (ShellTaskOrganizer.onTaskAppeared) [1150s ago]
+      Task=5(main)#45 (ShellTaskOrganizer.onTaskAppeared) [1150s ago]
+      Task=0(Bubbles-visibility-barrier)#47 (ShellTaskOrganizer.onTaskAppeared) [1150s ago]
+      Dim layer#50 (SurfaceUtils.makeColorLayer) [1149s ago]
+      Dim layer#51 (SurfaceUtils.makeColorLayer) [1149s ago]
+      WallpaperService-com.android.systemui#54 (Wallpaper#initializeSurface) [1147s ago]
+      Wallpaper Transform wrapper#55 (Wallpaper#initializeSurface) [1147s ago]
+      Wallpaper BBQ wrapper#56 (Wallpaper#initializeSurface) [1147s ago]
+      [Gesture Monitor] edge-swipe#77 (readFromParcel) [1124s ago]
+      VRI-StatusBar#90 (VRI-new) [1114s ago]
+      VRI-NotificationShade#89 (VRI-cache) [1107s ago]
+      Task=83#124 (ShellTaskOrganizer.onTaskAppeared) [781s ago]
+      VRI-Bubbles!#145 (VRI-new) [774s ago]
+      Task=84#156 (ShellTaskOrganizer.onTaskAppeared) [679s ago]
+      Bounds for - Bubbles!#183 (ViewRootImpl.getBoundsLayer) [416s ago]
+      Task=85#188 (ShellTaskOrganizer.onTaskAppeared) [415s ago]
+      Task=85#188 (Transitions.onTransitionReady) [111s ago]
+      Task=85#188 (TaskController.prepareOpen) [111s ago]
+    sCallStackDebuggingInitialized=false
+    sCallStackDebuggingEnabled=false
+    sCallStackDebuggingMatchName=null
+    sCallStackDebuggingMatchCall=null
+    sLogAllTxCallsOnApply=false
+
+    NORMAL dump took 8ms -- com.android.systemui.wmshell.WMShell
+
+    Dump took 8ms

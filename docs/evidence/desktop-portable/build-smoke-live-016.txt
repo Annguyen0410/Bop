@@ -1,0 +1,33 @@
+Bop Desktop 0.1.6 — build, unit tests, smoke and live check (2026-10-09, PDT)
+============================================================================
+
+unit tests            npm test                     -> tests 71, pass 71, fail 0, cancelled 0, skipped 0
+source smoke          electron . --bop-smoke       -> SMOKE OK, 33 steps, 4 alerts
+                                                   C:/Users/nguye/AppData/Local/Temp/bop-smoke-016/smoke/smoke.json
+                                                   copied to docs/evidence/desktop-portable/source-smoke-016.json
+packaged build        npm run dist:portable        -> exit 0
+                                     packaging  platform=win32 arch=x64 electron=38.8.6 appOutDir=dist\win-unpacked
+                                     building   target=portable file=dist\Bop-0.1.6-portable.exe archs=x64
+                                     signing    signtool.exe (no certificate installed: SmartScreen still warns)
+packaged smoke        dist\win-unpacked\Bop.exe --bop-smoke    -> SMOKE OK, 33 steps, 4 alerts, packaged:true
+                                                   C:/Users/nguye/AppData/Local/Temp/bop-pkg-smoke-016/smoke/smoke.json
+                                                   copied to docs/evidence/desktop-portable/packaged-smoke-016.json
+live check            npm run smoke:live:exe       -> LIVE CHECK OK · 0 failed · 13 steps, packaged:true
+                                                   C:/Users/nguye/AppData/Local/Temp/bop-live-run/live-check.json
+                                                   copied to docs/evidence/desktop-portable/live-check-016.json
+real panel site       app.usercrowd.com in source and packaged builds -> sign-in page in both layouts
+                                                   docs/evidence/desktop-portable/panel-016.txt
+
+artifact              desktop/dist/Bop-0.1.6-portable.exe
+                      85 196 781 bytes
+                      sha256 01d6782b6cae9e8bac99c4cc6ed6250eb37c4f5563907b346b64139473d115d5
+delivered             C:\Users\nguye\OneDrive\Desktop\Bop-0.1.6-portable.exe — same sha256 as the built file
+
+The two new smoke steps, quoted from the packaged run:
+  phone-layout           {"defaultedToPhone":true,"phone":true,"desktop":false,"switchedBack":true,
+                          "namesTheApp":{"phone":false,"desktop":false,"phoneAgain":false}}
+  browser-refusal-note   {"refusalTitle":"Sorry, you can’t use UserCrowd on this version of Electron",
+                          "noteSet":true,"noteCleared":true}
+
+The live check ran against dist/Bop-0.1.6-portable.exe itself (the launcher needs ~30 s to extract on the
+first run, which is why an immediate DevTools query returns nothing: measured, then it answers 200).

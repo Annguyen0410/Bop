@@ -1,0 +1,81 @@
+{
+  "kind": "local SSE integration fixture (not live-service messaging)",
+  "ok": true,
+  "steps": [
+    {
+      "name": "three-isolated-same-origin-sessions; B/C detect while A selected; source notifications denied",
+      "passed": true
+    },
+    {
+      "name": "minimized and closed-to-tray continue receiving fixture stream events",
+      "passed": true
+    },
+    {
+      "name": "unchanged state is quiet; title plus website signal requests one OS notice; consecutive accounts request separate notices",
+      "passed": true,
+      "limitation": "OS audible playback is not asserted; title changes expose no original message IDs"
+    },
+    {
+      "name": "login-path hint and account independence",
+      "passed": true,
+      "limitation": "not an actual provider token expiration"
+    },
+    {
+      "name": "renderer crash retries with real backoff, preserves profile and reconciles exposed unread delta",
+      "passed": true
+    },
+    {
+      "name": "fixture site reconnects its own EventSource and exposes missed unread after network restore",
+      "passed": true,
+      "limitation": "no provider sync API/cursor; same-count or read messages are not recoverable"
+    },
+    {
+      "name": "Bop sound mute leaves detection operational and requests silent OS notification",
+      "passed": true
+    },
+    {
+      "name": "real encrypted settings restore loaded ids/unread metadata",
+      "passed": true,
+      "limitation": "settings roundtrip, not a full process-restart/live login test"
+    },
+    {
+      "name": "stop-monitoring via actual IPC closes all views/listeners/streams and cancels retries",
+      "passed": true
+    }
+  ],
+  "idle": {
+    "processes": 8,
+    "workingSetMiB": 712.63,
+    "cpuPercent": 0.016,
+    "views": 3,
+    "monitors": 3,
+    "retries": 0,
+    "requests": 15,
+    "requestsDuringWindow": 0
+  },
+  "active": {
+    "processes": 8,
+    "workingSetMiB": 712.9,
+    "cpuPercent": 0.205,
+    "views": 3,
+    "monitors": 3,
+    "retries": 0,
+    "requests": 15
+  },
+  "stopped": {
+    "processes": 5,
+    "workingSetMiB": 445.23,
+    "cpuPercent": 0.005,
+    "views": 0,
+    "monitors": 0,
+    "retries": 0,
+    "requests": 15
+  },
+  "notificationAttempts": 17,
+  "osNotificationDiagnostics": {
+    "shown": 17,
+    "failed": 0,
+    "lastSilent": false
+  },
+  "audibleSoundVerified": false
+}

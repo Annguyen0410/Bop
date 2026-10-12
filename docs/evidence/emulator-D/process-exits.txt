@@ -1,0 +1,28 @@
+ACTIVITY MANAGER PROCESS EXIT INFO (dumpsys activity exit-info)
+Last Timestamp of Persistence Into Persistent Storage: 1969-12-31 16:00:00.000
+  package: com.example.twoaccmess
+    Historical Process Exit for uid=10229
+        ApplicationExitInfo #0:
+          timestamp=2026-10-08 20:54:24.749 pid=22447 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.example.twoaccmess reason=3 (LOW_MEMORY) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=0.00 rss=142MB state=empty trace=null
+          description=null
+          anrInfo=null
+        ApplicationExitInfo #1:
+          timestamp=2026-10-08 20:54:21.816 pid=19021 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.example.twoaccmess reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=0.00 rss=0.00 state=empty trace=null
+          description=stop com.example.twoaccmess due to start instr
+          anrInfo=null
+        ApplicationExitInfo #2:
+          timestamp=2026-10-08 20:51:57.329 pid=16260 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.example.twoaccmess reason=3 (LOW_MEMORY) subreason=0 (UNKNOWN) status=0
+          importance=400 pss=0.00 rss=107MB state=empty trace=null
+          description=null
+          anrInfo=null
+        ApplicationExitInfo #3:
+          timestamp=2026-10-08 20:51:55.381 pid=2811 realUid=10229 packageUid=10229 definingUid=10229 user=0
+          process=com.example.twoaccmess reason=10 (USER REQUESTED) subreason=21 (FORCE STOP) status=0
+          importance=100 pss=0.00 rss=0.00 state=empty trace=null
+          description=stop com.example.twoaccmess due to start instr
+          anrInfo=null

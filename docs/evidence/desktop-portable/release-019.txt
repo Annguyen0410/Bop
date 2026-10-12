@@ -1,0 +1,149 @@
+Bop desktop 0.1.9 — release-readiness round, October 10, 2026
+=============================================================
+
+Asked for: is the app ready to release, and fix whatever is needed so it is; turn every Vietnamese
+string into English; delete the older builds and keep only the newest one.
+
+=============================================================================
+1. "Is it ready?" — the honest answer, and what this round changed
+=============================================================================
+
+The product was already in shape: 86 desktop unit tests, 45 smoke steps and a 15-step live check all
+passed against the shipped 0.1.8 file. What this round found and repaired was not in the product's
+behaviour but in three things around it:
+
+  1. The Android build shipped Vietnamese (and 80 other languages) after all — see section 2.
+  2. Two steps of the desktop smoke sampled a state instead of waiting for it, so they could fail on a
+     busy machine even though nothing was wrong with the app. Both are now bounded waits for the actual
+     condition. Found by running the check, not by reading it:
+
+       - `reminder-card` failed once with the machine down to ~2 GB free memory:
+         "no reminder card appeared for a web notification". The step awaited a fixed 500 ms after
+         clicking a page's notify button, but the first card of a run has to create its window and load
+         alert.html first. The same build passed 45/45 as soon as the load was gone. It now waits for the
+         card window itself, up to 8 s, and reports how long it waited.
+       - `pane-visibility` failed once — "the dashboard reports hidden" — while the user's own copy of
+         Bop sat maximised over the smoke's window: the engine reports a covered window as hidden by
+         itself. The step now raises the smoke's own window and reads it again, bounded, and reports
+         visible/focused/minimised with the failure. With the 0.1.4 defect (a view never told it had
+         become visible) focusing changes nothing and the check still fails, so it keeps its teeth.
+         Fixed run: {state: visible, dashboardWaitedMs: 1, shellWindow: {visible: true, focused: true}}.
+
+  3. The old builds are gone (section 4).
+
+Still not ready for a public release, and not fixable here — the artifact is unsigned (section 5), no
+real signed-in account has ever been tested, and there is no installer target in this build. Those are
+recorded as limitations rather than as passes.
+
+=============================================================================
+2. English only — what was scanned and what was actually Vietnamese
+=============================================================================
+
+Scan 1 — the shipped desktop application. The text inside the delivered `app.asar`
+(`dist/win-unpacked/resources/app.asar`, 300,532 bytes, sha256 e07aa451...) was decoded as UTF-8 and
+searched for the Vietnamese letter set:
+
+    vietnamese signature chars: 2 ("ìÁ") — both inside binary image blobs (the bubble PNGs), not text.
+
+So the desktop app ships English text only, as it has since the 0.1.3 English pass. Its Windows
+metadata agrees: ProductName Bop, FileDescription Bop, CompanyName Bop.
+
+Scan 2 — the Android build. Bop's own strings (app/src/main/res/values/strings.xml) are English, but
+every AndroidX library also ships its own translations, and the merged resources carried 88 `values-*`
+folders — `values-vi` among them, straight into the APK. A phone set to Vietnamese therefore showed
+library text in Vietnamese ("Tự động điền", "Trả lời", "Cuộc gọi đến", …).
+
+Fixed in `app/build.gradle.kts`:
+
+    androidResources {
+        localeFilters += listOf("en")
+    }
+
+Measured before and after, on the APKs themselves.
+
+  Before — the release APK on disk (built October 5, 1,467,466 bytes):
+    probe for 'Tự động điền', 'Cuộc gọi đến', 'Đang sàng lọc', 'Từ chối', 'Kết thúc'
+    -> vietnamese strings found: all five
+
+  After — the same variant rebuilt (1,336,583 bytes, sha256 5133aa58...):
+    -> vietnamese strings found: none
+    aapt2 dump configurations: anydpi-v26 hdpi mdpi night xhdpi xxhdpi xxxhdpi
+    (no locale configuration at all — previously ~80 of them)
+    1,467,466 -> 1,336,583 bytes = 130,883 bytes smaller
+
+  After — the debug variant rebuilt (11,682,337 bytes, sha256 eddf3ea5...):
+    -> vietnamese strings found: none
+    aapt2 dump configurations: anydpi-v26 hdpi mdpi night v28 v30 xhdpi xxhdpi xxxhdpi
+
+  Android JVM tests, forced to re-run (`--rerun-tasks`): 124 tests, 0 failures, 0 errors, 0 skipped,
+  BUILD SUCCESSFUL, exit 0. The change is a resource filter, so no Kotlin test changed behaviour.
+
+=============================================================================
+3. The rest of the checks on the delivered desktop file
+=============================================================================
+
+  Desktop unit tests                86 passed, 0 failed, 0 skipped, exit 0
+  Packaged smoke, from the EXE      45 steps, ok: true, 4 alerts, launcher exit 0,
+                                    packaged: true, missingFiles: []
+                                    docs/evidence/desktop-portable/packaged-smoke-019.json
+  Live check on the same EXE        15/15 steps, ok: true, 0 failed, exit 0
+                                    docs/evidence/desktop-portable/live-check-019.json
+                                    including the machine's own pointer dragging the bubble:
+                                    press (70,393), window 38,361 -> 258,491 for a +220,+130 drag,
+                                    offBy 0, size unchanged 64x64
+  Dashboard / reminder captures     dashboard-wide-019.png, reminder-019.png
+
+=============================================================================
+4. Old builds removed — what was deleted, with its recorded hash
+=============================================================================
+
+Removed from `desktop/dist` (sizes and sha256 taken immediately before deletion):
+
+  Bop-0.1.2-portable.exe    85,176,481  1edeb138384bdb9b3deb9e8c4079decab9aabfef2e30a8f56989e2cb43d16bbf
+  Bop-0.1.2-setup.exe       85,405,407  52fa33e59be87d2553fdd96b925f8224937e17e2470d06128318a70aa7d2bb13
+  Bop-0.1.3-portable.exe    85,185,034  ff764a3d94d6087347426ae66e61e94a79162381bad24d8371500eb876662109
+  Bop-0.1.3-setup.exe       85,405,210  228972635412e8c3359848d6a16fad4435dc6bdd21661a25c930ac037e6e3072
+  Bop-0.1.4-portable.exe    85,191,512  762b9858cff386892d7c26505fb5247e396aa0ef20cc9b912179306ce0f56fa8
+  Bop-0.1.5-portable.exe    85,195,368  635f2d98d3833ab322562632f3de5d83624320a360a116d41ec688cae9e26005
+  Bop-0.1.6-portable.exe    85,196,781  01d6782b6cae9e8bac99c4cc6ed6250eb37c4f5563907b346b64139473d115d5
+  Bop-0.1.7-portable.exe    85,202,841  5c1f8877a0526cda7c5255fa1c1570b95a10d5cac1b461128720c1b06fb0f2b7
+  Bop-0.1.8-portable.exe    85,213,624  3828466165b0c52c1100a1fa4f301f52cb225d4ef26c1a554283c433b9a0298c
+
+`desktop/dist` now holds one executable, `Bop-0.1.9-portable.exe`. The unpacked folder
+(`dist/win-unpacked`) and `builder-debug.yml` belong to that same build and were kept; a fresh build
+regenerates them.
+
+One older file could not be deleted: `C:\Users\nguye\OneDrive\Desktop\Bop-0.1.8-portable.exe` is held by
+the running copy of Bop the user has open (`rm: Device or resource busy`). It is the same file as the
+0.1.8 above; it can be deleted once that instance is quit. The new file is already beside it:
+`C:\Users\nguye\OneDrive\Desktop\Bop-0.1.9-portable.exe`, byte-identical to `desktop/dist`.
+
+=============================================================================
+5. The delivered artifact
+=============================================================================
+
+  file            desktop/dist/Bop-0.1.9-portable.exe
+  bytes           85,210,117
+  sha256          f16b8f152dcf98a36cfb83c0c5f8b3cb98649289aaf5b39ebe81ec516e44b7f1
+  asar            sha256 e07aa451a96f81e33c2e93cd58048d8becb609ed38b68b614056d10f0856e573 (300,532 bytes)
+  version         0.1.9 / ProductVersion 0.1.9.0 (from the EXE's own version resource)
+  signed          NotSigned (Get-AuthenticodeSignature) — SmartScreen warns on first launch
+  built with      npx electron-builder --win portable --x64, exit 0
+  also copied to  C:\Users\nguye\OneDrive\Desktop\Bop-0.1.9-portable.exe (identical sha256)
+
+Why a 0.1.9 rather than shipping 0.1.8 unchanged: the two smoke steps above live in the app's source
+(`src/main/main.js`, the `--bop-smoke` path). A source edit under a shipped version number would have
+made the tree and the artifact disagree about what 0.1.8 is, so the version moved instead. The app's own
+behaviour is otherwise untouched: no user-facing code differs between 0.1.8 and 0.1.9.
+
+The start-at-login entry the live check exercises was left enabled by that run, naming the file it
+launched (`desktop/dist/Bop-0.1.9-portable.exe`). Launching the Desktop copy once re-registers that path
+instead, which is the copy to keep.
+
+Still not verified, and not claimed:
+  - no real signed-in service account in either app; every fixture page is a local 127.0.0.1 page
+  - no installer target was built, and install/uninstall was not executed
+  - neither artifact is code-signed
+  - the Android release APK is unsigned as well (no signing configuration in this checkout)
+  - the desktop free-drag was verified with the machine's own pointer on a 1920x1080 100%-scale display
+    only: no touch/pen input, no scaled display, no second monitor

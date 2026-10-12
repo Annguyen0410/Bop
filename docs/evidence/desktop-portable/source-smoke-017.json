@@ -1,0 +1,154 @@
+{
+  "ok": true,
+  "steps": [
+    {
+      "name": "packaged-files",
+      "detail": "{\"packaged\":false,\"iconEmpty\":false,\"icon\":{\"width\":64,\"height\":64},\"missingFiles\":[]}"
+    },
+    {
+      "name": "defaults",
+      "detail": "{\"bubble\":true,\"startAtLogin\":true,\"keepPagesAlive\":true,\"installedPlan\":{\"path\":\"C:/app/Bop.exe\",\"args\":[\"--bop-autostart\"]},\"portablePlan\":{\"path\":\"C:/Users/me/OneDrive/Desktop/Bop-portable.exe\",\"args\":[\"--bop-autostart\"]},\"devPlan\":null}"
+    },
+    {
+      "name": "tray",
+      "detail": "{\"tray\":true,\"packaged\":false}"
+    },
+    {
+      "name": "autostart",
+      "detail": "{\"wanted\":true,\"supported\":false,\"registered\":false,\"portable\":false,\"error\":null,\"executable\":\"development\"}"
+    },
+    {
+      "name": "spaces",
+      "detail": "A:Account A:messenger B:Account B:messenger"
+    },
+    {
+      "name": "cookie-isolation",
+      "detail": "A=1 B=0 separate=true"
+    },
+    {
+      "name": "fingerprints",
+      "detail": "{\"beforeAnyRead\":null,\"afterFirstRead\":\"cb4492d6\\u0000bf504dda\",\"afterSecondRead\":\"cb4492d6\\u0000bf504dda\",\"baseline\":[{\"id\":\"C\",\"alert\":false,\"failures\":0}],\"quiet\":[{\"id\":\"C\",\"alert\":false,\"failures\":0}]}"
+    },
+    {
+      "name": "watcher",
+      "detail": "{\"baseline\":[{\"id\":\"C\",\"alert\":false,\"failures\":0}],\"quiet\":[{\"id\":\"C\",\"alert\":false,\"failures\":0}],\"afterChange\":[{\"id\":\"C\",\"alert\":true,\"failures\":0}]}"
+    },
+    {
+      "name": "watcher-filter",
+      "detail": "{\"filtered\":[{\"id\":\"C\",\"alert\":false,\"failures\":0}],\"available\":[{\"id\":\"C\",\"alert\":true,\"failures\":0}],\"body\":\"5 studies available\"}"
+    },
+    {
+      "name": "web-notification",
+      "detail": "[\"Watch test · New study\"]"
+    },
+    {
+      "name": "notification-repeat-silent",
+      "detail": "{\"arrivedAgain\":true,\"attemptsBefore\":1,\"attemptsAfter\":1,\"cardBefore\":3,\"cardAfter\":3,\"title\":\"Watch test · New study\"}"
+    },
+    {
+      "name": "notification-changed-notifies",
+      "detail": "{\"attempts\":2,\"card\":4,\"title\":\"Watch test · New study\",\"body\":\"Prolific · 5 places left\"}"
+    },
+    {
+      "name": "same-origin-permission-A",
+      "detail": "{\"permission\":\"granted\",\"initial\":\"granted\",\"requested\":\"granted\",\"error\":null,\"tag\":\"bop:A:same-thread\"}"
+    },
+    {
+      "name": "same-origin-permission-B",
+      "detail": "{\"permission\":\"granted\",\"initial\":\"granted\",\"requested\":\"granted\",\"error\":null,\"tag\":\"bop:B:same-thread\"}"
+    },
+    {
+      "name": "same-origin-two-accounts",
+      "detail": "{\"counts\":[1,1],\"loaded\":[\"A\",\"B\"]}"
+    },
+    {
+      "name": "opened-spaces-disk",
+      "detail": "{\"loaded\":[\"A\",\"B\"],\"urls\":[\"http://127.0.0.1:49674/chat\",\"http://127.0.0.1:49674/chat\"]}"
+    },
+    {
+      "name": "hidden-account-notification",
+      "detail": "{\"hidden\":true,\"A\":\"Second message\",\"B\":\"First message\"}"
+    },
+    {
+      "name": "navigation-policy",
+      "detail": "outside-host-allowed=false"
+    },
+    {
+      "name": "docking",
+      "detail": "{\"size\":64,\"dropped\":{\"x\":377,\"y\":512},\"pulledTopLeft\":{\"x\":0,\"y\":0},\"pulledBottomRight\":{\"x\":1856,\"y\":968},\"menuSpot\":{\"x\":790,\"y\":396},\"menuOffCentre\":0}"
+    },
+    {
+      "name": "phone-layout",
+      "detail": "{\"defaultedToPhone\":true,\"phone\":true,\"desktop\":false,\"switchedBack\":true,\"agents\":{\"phone\":\"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.249 Mobile Safari/537.36\",\"desktop\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.249 Safari/537.36\",\"phoneAgain\":\"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.7339.249 Mobile Safari/537.36\"},\"namesTheApp\":{\"phone\":false,\"desktop\":false,\"phoneAgain\":false}}"
+    },
+    {
+      "name": "pane-visibility",
+      "detail": "{\"pane\":{\"state\":\"hidden\",\"hidden\":true,\"focus\":true},\"ticksIn1200ms\":12,\"dashboard\":{\"state\":\"visible\",\"hidden\":false},\"keepPagesAlive\":true}"
+    },
+    {
+      "name": "space-without-address",
+      "detail": "{\"refused\":{\"ok\":false,\"error\":\"This space has no address yet. Open Edit and paste the page it should show.\",\"needsEdit\":true},\"panes\":[\"C\",\"A\",\"B\",\"D\"],\"open\":null}"
+    },
+    {
+      "name": "dialog-view-order",
+      "detail": "{\"pickerShown\":true,\"raised\":true,\"pickerClosed\":true,\"lowered\":true,\"children\":5}"
+    },
+    {
+      "name": "browser-refusal-note",
+      "detail": "{\"refusalTitle\":\"Sorry, you canâ€™t use UserCrowd on this version of Electron\",\"noteSet\":true,\"noteCleared\":true,\"text\":\"This page says it does not support the browser Bop opens it with, so the pane stays empty. Open the address in your own browser to check it.\"}"
+    },
+    {
+      "name": "theme-follows-system",
+      "detail": "{\"light\":{\"dashboard\":\"light\",\"colourScheme\":\"light\"},\"dark\":{\"dashboard\":\"dark\",\"colourScheme\":\"dark\"}}"
+    },
+    {
+      "name": "open-pane-visible",
+      "detail": "{\"state\":\"visible\"}"
+    },
+    {
+      "name": "bubble-unread-live",
+      "detail": "{\"before\":{\"hidden\":false,\"text\":\"4\"},\"after\":{\"hidden\":false,\"text\":\"3\"}}"
+    },
+    {
+      "name": "bubble-menu-centred",
+      "detail": "{\"bounds\":{\"x\":790,\"y\":355,\"width\":340,\"height\":322},\"offCentre\":0,\"theme\":\"dark\"}"
+    },
+    {
+      "name": "bubble-menu-initial",
+      "detail": "[{\"id\":\"A\",\"badge\":null},{\"id\":\"B\",\"badge\":\"1\"},{\"id\":\"C\",\"badge\":\"2\"},{\"id\":\"D\",\"badge\":null}]"
+    },
+    {
+      "name": "bubble-release-free",
+      "detail": "{\"wanted\":{\"x\":997,\"y\":505},\"got\":{\"x\":997,\"y\":505},\"stayed\":true,\"size\":{\"width\":64,\"height\":64}}"
+    },
+    {
+      "name": "bubble-prefs",
+      "detail": "{\"size\":48,\"spot\":{\"x\":997,\"y\":505},\"opacity\":0.8,\"onScreen\":true}"
+    },
+    {
+      "name": "bubble-restore",
+      "detail": "{\"stored\":{\"x\":0.5192708333333333,\"y\":0.4893410852713178,\"size\":48},\"restored\":{\"x\":997,\"y\":505},\"keptSpot\":true}"
+    },
+    {
+      "name": "settings-ui",
+      "detail": "{\"missing\":[]}"
+    },
+    {
+      "name": "bubble-controls-click",
+      "detail": "{\"clicked\":true,\"width\":64,\"spot\":{\"x\":997,\"y\":505},\"stored\":64}"
+    },
+    {
+      "name": "reminder-card",
+      "detail": "{\"text\":\"NEW MESSAGE ALERT Account A · Same chat Third message Open Account A ×\",\"card\":{\"x\":1566,\"y\":686,\"width\":336,\"height\":128},\"bubble\":{\"x\":1720,\"y\":832,\"width\":64,\"height\":64},\"onScreen\":true,\"clearOfBubble\":true}"
+    },
+    {
+      "name": "reminder-opened",
+      "detail": "{\"acknowledged\":true,\"open\":\"A\",\"hidden\":true}"
+    },
+    {
+      "name": "screenshots",
+      "detail": "C:\\Users\\nguye\\AppData\\Local\\Temp\\bop-smoke-017\\smoke"
+    }
+  ],
+  "alerts": 4
+}

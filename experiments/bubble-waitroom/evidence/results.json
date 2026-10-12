@@ -1,0 +1,34 @@
+{
+  "environment": "Android 17/API 37 emulator-5554; unrooted Play Store image; no physical phone used",
+  "sourceUid": 10229,
+  "roomUid": 10230,
+  "probes": {
+    "notificationSnooze": true,
+    "timerRestoresNotification": true,
+    "timerObservedSeconds": 25.127,
+    "sourceUpdatesSnoozedMessage": true,
+    "originalChatOpenedByVisibleSender": true,
+    "foreignRepostDeniedWithoutDelegation": true,
+    "systemBubbleStackCountBefore": 2,
+    "systemBubbleStackCountDuringSnooze": 2,
+    "sourceOverlayStillPresent": true
+  },
+  "userAcceptance": {
+    "hideOriginalBubbleInsideBop": false,
+    "dragForeignBubbleIntoRoom": "not implemented or tested",
+    "restoreOriginalBubbleOnDemand": "not implemented; foreign notification repost denied",
+    "messengerAndZaloCompatibility": "not tested"
+  },
+  "artifacts": [
+    {
+      "file": "artifacts/waitroom-source-lab.apk",
+      "bytes": 20823,
+      "sha256": "b281c0abea7c6b6acfe4b00ee2a1fa105551ce14da34a063f798427d26898748"
+    },
+    {
+      "file": "artifacts/waitroom-room-lab.apk",
+      "bytes": 20823,
+      "sha256": "0e7b5b1353d1af2d529b547697113a840b8bd9058f059e511fb5fd6ea50f1fee"
+    }
+  ]
+}
