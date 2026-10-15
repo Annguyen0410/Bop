@@ -4,7 +4,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const {
   app, BaseWindow, WebContentsView, BrowserWindow, ipcMain, screen, session,
-  shell, Tray, Menu, dialog, nativeImage, safeStorage, Notification, nativeTheme,
+  shell, Tray, Menu, dialog, nativeImage, safeStorage, Notification, nativeTheme, clipboard,
 } = require('electron');
 
 const spaces = require('./spaces.js');
@@ -16,6 +16,8 @@ const popup = require('./popup.js');
 const notifyLog = require('./notify-log.js');
 const autostart = require('./autostart.js');
 const { AccountMonitor } = require('./message-monitor.js');
+const notesSync = require('./notes-sync.js');
+const { randomUUID, randomBytes } = require('node:crypto');
 
 // Windows ties a taskbar identity — and therefore any notification the OS agrees to show — to this id.
 // It is also what the installer's Start Menu shortcut carries, so an installed Bop is recognised as the
@@ -24,11 +26,15 @@ app.setAppUserModelId('com.bop.desktop');
 
 const MONITOR_SMOKE = process.argv.includes('--bop-monitor-smoke');
 const SMOKE = process.argv.includes('--bop-smoke') || MONITOR_SMOKE;
+const LIVE_CHECK = process.argv.includes('--bop-live-check');
 const SMOKE_ACTIVE = process.argv.includes('--bop-active'); // smoke with a visible window, used for capture
+const LIVE_OUT_ARG = process.argv.includes('--bop-out') ? process.argv[process.argv.indexOf('--bop-out') + 1] : null;
+const LIVE_USER_DATA_ARG = process.env.BOP_LIVE_USER_DATA || process.argv.find((argument) => argument.startsWith('--user-data-dir='))?.slice('--user-data-dir='.length) || null;
+const LIVE_SETTINGS_ARG = process.env.BOP_LIVE_SETTINGS;
 // The operating system started this copy at sign-in. Nothing was clicked, so the dashboard stays out of
 // the way: the tray and the bubble are the surfaces until the user asks for the hub.
-const LAUNCHED_AT_LOGIN = !SMOKE && autostart.launchedAtLogin(process.argv);
-const SMOKE_OUT = valueAfter('--bop-out') || path.join(app.getPath('userData'), 'smoke');
+const LAUNCHED_AT_LOGIN = !SMOKE && !LIVE_CHECK && autostart.launchedAtLogin(process.argv);
+const SMOKE_OUT = LIVE_OUT_ARG || valueAfter('--bop-out') || path.join(app.getPath('userData'), 'smoke');
 const SIDEBAR = 320;
 
 /** Shown on a space card when the page answered by refusing the browser instead of serving itself. */
@@ -58,20 +64,22 @@ function valueAfter(flag) {
   return index >= 0 ? process.argv[index + 1] : null;
 }
 
-// A smoke run must never read or write the real Bop settings: a leftover watch fingerprint from the
-// previous run would look like a live page change, and the run would also trample the user's spaces.
-// Own userData directory, reset every run, so each smoke run starts exactly like a first launch.
-if (SMOKE) {
+// Verification runs must never read or write the real Bop settings: a leftover watch fingerprint from
+// the previous run would look like a live page change, and the run would also trample the user's spaces.
+// Own userData directory, reset every run, so each run starts exactly like a first launch.
+if (SMOKE || LIVE_CHECK) {
   fs.mkdirSync(SMOKE_OUT, { recursive: true });
-  const isolated = path.join(SMOKE_OUT, 'userdata');
-  fs.rmSync(isolated, { recursive: true, force: true });
+  const isolated = LIVE_CHECK && LIVE_USER_DATA_ARG ? LIVE_USER_DATA_ARG : app.getPath('userData');
+  if (path.resolve(app.getPath('userData')) !== path.resolve(isolated)) app.setPath('userData', isolated);
+  // The live checker writes a controlled fixture profile before launch. Only the standalone smoke run
+  // owns and resets its profile; removing the live fixture here would silently replace it with defaults.
+  if (SMOKE) fs.rmSync(isolated, { recursive: true, force: true });
   fs.mkdirSync(isolated, { recursive: true });
-  app.setPath('userData', isolated);
   // Say it out loud rather than assume it: a smoke run that ever fell back to the real profile would
   // write its own fixture spaces into the user's space list, and one of those (a `custom` space with
   // no address) is exactly the state that used to open an empty pane. Refuse to run at all instead.
-  if (app.getPath('userData') !== isolated) {
-    throw new Error('a smoke run could not isolate its profile and must not touch the real settings');
+  if (!path.isAbsolute(isolated) || !fs.existsSync(isolated)) {
+    throw new Error('a verification run could not isolate its profile and must not touch the real settings');
   }
 }
 
@@ -79,10 +87,10 @@ if (SMOKE) {
 // the same desktop — and with "start Bop when I sign in" on, clicking the app while it is already running
 // is the normal thing to do, so the second launch hands its request to the running copy instead. A smoke
 // run never takes the lock, so verification can always run next to a Bop the user has open.
-const singleInstance = SMOKE ? true : app.requestSingleInstanceLock();
+const singleInstance = SMOKE || LIVE_CHECK ? true : app.requestSingleInstanceLock();
 if (!singleInstance) {
   app.quit();
-} else if (!SMOKE) {
+} else if (!SMOKE && !LIVE_CHECK) {
   // The second launch is a request to see the hub, not a second copy of it.
   app.on('second-instance', () => {
     if (!shellWindow) createShellWindow();
@@ -96,15 +104,18 @@ if (!singleInstance) {
 // exactly like the Android build's encrypted settings file. When the OS cannot provide one, the file
 // says so instead of pretending.
 // ---------------------------------------------------------------------------------------------
-const settingsPath = () => path.join(app.getPath('userData'), 'bop-settings.bin');
+const settingsPath = () => LIVE_CHECK && LIVE_SETTINGS_ARG ? LIVE_SETTINGS_ARG : path.join(app.getPath('userData'), 'bop-settings.bin');
 
 function loadSettings() {
   try {
     const raw = fs.readFileSync(settingsPath());
-    if (raw.slice(0, 4).toString('utf8') === 'BOP0') return spaces.normalize(JSON.parse(raw.slice(4).toString('utf8')));
-    if (!safeStorage.isEncryptionAvailable()) return spaces.defaultState();
-    const json = safeStorage.decryptString(raw);
-    return spaces.normalize(JSON.parse(json));
+    if (raw.length > NOTES_MAX_STORAGE_BYTES + 65_536) return spaces.defaultState();
+    const decoded = raw.slice(0, 4).toString('utf8') === 'BOP0'
+      ? raw.slice(4).toString('utf8')
+      : LIVE_CHECK ? raw.toString('utf8')
+        : safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(raw) : null;
+    return decoded && Buffer.byteLength(decoded, 'utf8') <= NOTES_MAX_STORAGE_BYTES
+      ? spaces.normalize(JSON.parse(decoded)) : spaces.defaultState();
   } catch (_) {
     return spaces.defaultState();
   }
@@ -112,15 +123,22 @@ function loadSettings() {
 
 function saveSettings() {
   try {
-    const json = JSON.stringify({ ...state, alerts: undefined });
-    const payload = safeStorage.isEncryptionAvailable()
-      ? safeStorage.encryptString(json)
-      : Buffer.concat([Buffer.from('BOP0', 'utf8'), Buffer.from(json, 'utf8')]);
+    const json = JSON.stringify({ ...state, notes: notesWithTombstones(state.notes, state.noteTombstones || []), alerts: undefined });
+    if (Buffer.byteLength(json, 'utf8') > NOTES_MAX_STORAGE_BYTES) {
+      diskError = 'Settings exceed the safe storage limit; remove some notes or images.';
+      return false;
+    }
+    const payload = LIVE_CHECK ? Buffer.from(json, 'utf8')
+      : safeStorage.isEncryptionAvailable()
+        ? safeStorage.encryptString(json)
+        : Buffer.concat([Buffer.from('BOP0', 'utf8'), Buffer.from(json, 'utf8')]);
     fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
     fs.writeFileSync(settingsPath(), payload);
     diskError = safeStorage.isEncryptionAvailable() ? null : 'Settings are stored unencrypted: this system did not offer a key.';
+    return true;
   } catch (failure) {
     diskError = `Settings could not be saved (${failure.message}).`;
+    return false;
   }
 }
 
@@ -156,6 +174,13 @@ const notificationDiagnostics = { shown: 0, failed: 0, lastSilent: null };
 // notify-log.js: only the most recent notification per space is remembered, and nothing is persisted.
 let notifyLogState = notifyLog.empty();
 let openSpaceId = null;
+let notesWindow = null;
+let notesServer = null;
+let notesSyncError = null;
+let notesSyncGeneration = 0;
+let notesSyncJob = Promise.resolve();
+let notesSyncDeadline = null;
+const NOTES_MAX_STORAGE_BYTES = 12_000_000;
 
 function monitorFor(id) {
   if (!monitors.has(id)) monitors.set(id, new AccountMonitor(state.monitorState[id]));
@@ -406,6 +431,7 @@ function layout() {
   if (!shellWindow || !uiView) return;
   const [width, height] = shellWindow.getContentSize();
   uiView.setBounds({ x: 0, y: 0, width, height });
+  if (typeof uiView.setVisible === 'function') uiView.setVisible(shellWindow.isVisible());
   for (const [id, view] of spaceViews) {
     const open = id === openSpaceId;
     view.setBounds(open
@@ -442,6 +468,8 @@ function createShellWindow() {
   shellWindow.contentView.addChildView(uiView);
   uiView.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   shellWindow.on('resize', layout);
+  shellWindow.on('show', layout);
+  shellWindow.on('hide', layout);
   shellWindow.on('close', (event) => {
     if (!app.isQuitting && (tray || bubbleWindow)) {
       event.preventDefault();
@@ -462,7 +490,8 @@ function createShellWindow() {
   layout();
   // A sign-in launch shows the tray and the bubble instead. If neither exists there would be no way back
   // to the hub, so the dashboard is shown anyway rather than leaving a running app with no way in.
-  if (!SMOKE && (!LAUNCHED_AT_LOGIN || !(tray || state.bubble))) shellWindow.show();
+  if ((!SMOKE && !LIVE_CHECK) && (!LAUNCHED_AT_LOGIN || !(tray || state.bubble))) shellWindow.show();
+  if (LIVE_CHECK) shellWindow.show();
 }
 
 /**
@@ -998,9 +1027,26 @@ async function readAlertingSpaces() {
 // ---------------------------------------------------------------------------------------------
 // IPC
 // ---------------------------------------------------------------------------------------------
+function notesWithTombstones(first, second) {
+  const byId = new Map();
+  for (const note of [...(first || []), ...(second || [])]) {
+    const normalized = notesSync.normalizeNote(note);
+    if (!normalized) continue;
+    const previous = byId.get(normalized.id);
+    if (!previous || normalized.deletedAt > previous.deletedAt ||
+        (normalized.deletedAt === previous.deletedAt && normalized.timestamp > previous.timestamp)) byId.set(normalized.id, normalized);
+  }
+  return [...byId.values()].sort((left, right) => Math.max(left.timestamp, left.deletedAt) - Math.max(right.timestamp, right.deletedAt) || left.id.localeCompare(right.id)).slice(-notesSync.MAX_MESSAGES);
+}
+
 function snapshot() {
   return {
     spaces: state.spaces,
+    notes: state.notes,
+    notesSync: { enabled: state.notesEnabled, running: !!notesServer, error: notesSyncError,
+      token: state.notesToken || '', port: notesSync.PORT, addresses: notesSync.localAddresses(),
+      pairingCode: state.notesEnabled ? notesSync.makePairingCode(state.notesToken).code : '',
+      lastSyncAt: state.notesLastSyncAt || 0, localDirty: state.notesDirty === true },
     slots: spaces.sortedSlots(state),
     enabled: spaces.enabledSpaces(state).map((space) => ({
       ...space,
@@ -1031,6 +1077,8 @@ function snapshot() {
     messageSound: state.messageSound,
     keepPagesAlive: state.keepPagesAlive !== false,
     startAtLogin: state.startAtLogin !== false,
+    notesUiEnabled: state.notesEnabled === true,
+    notesSyncRunning: !!notesServer,
     autoStart: autoStartInfo(),
     tray: !!tray,
     dashboardVisible: !!(shellWindow && !shellWindow.isDestroyed() && shellWindow.isVisible()),
@@ -1057,10 +1105,189 @@ function broadcast() {
   if (uiView) uiView.webContents.send('bop:changed', current);
   if (menuWindow) menuWindow.webContents.send('bop:changed', current);
   if (bubbleWindow) bubbleWindow.webContents.send('bop:changed', current);
+  if (notesWindow && !notesWindow.isDestroyed()) {
+    notesWindow.webContents.send('bop:notes-changed');
+    notesWindow.webContents.send('bop:notes-settings', snapshot().notesSync);
+  }
+}
+
+async function setNotesSync(enabled) {
+  notesSyncGeneration += 1;
+  const generation = notesSyncGeneration;
+  const previous = notesServer;
+  notesServer = null;
+  if (previous) await previous.close();
+  if (!enabled) {
+    clearTimeout(notesSyncDeadline); notesSyncDeadline = null;
+    notesSyncError = null;
+    state = { ...state, notesEnabled: false, notesToken: '', notesDirty: false };
+  } else {
+    const wasEnabled = state.notesEnabled;
+    state = { ...state, notesEnabled: true, notesDirty: true,
+      notesToken: !wasEnabled || !state.notesToken ? randomBytes(32).toString('hex') : state.notesToken };
+    await startNotesServer(generation);
+    scheduleNotesSync(0);
+  }
+  saveSettings();
+  broadcast();
+  return snapshot().notesSync;
+}
+
+function scheduleNotesSync(delay = 10_000) {
+  clearTimeout(notesSyncDeadline);
+  if (!state?.notesEnabled || app.isQuitting) return;
+  notesSyncDeadline = setTimeout(() => { notesSyncDeadline = null; void syncNotesWithPair(generationAtSchedule()); }, delay);
+}
+
+function generationAtSchedule() { return notesSyncGeneration; }
+
+async function syncNotesWithPair(generation) {
+  if (!state?.notesEnabled || !state.notesToken || generation !== notesSyncGeneration || !notesServer) return;
+  const notesBefore = state.notes;
+  const dirtyBefore = state.notesDirty === true;
+  const operation = notesSyncJob.then(async () => {
+    if (!state.notesEnabled || generation !== notesSyncGeneration || !notesServer) return;
+    const localNotes = notesWithTombstones(notesBefore, state.noteTombstones || []);
+    const result = await notesSync.syncWithDesktop('127.0.0.1', notesSync.PORT, state.notesToken,
+      dirtyBefore ? localNotes : []);
+    if (generation !== notesSyncGeneration || !state.notesEnabled) return;
+    const all = notesWithTombstones(state.noteTombstones || [], notesSync.mergeNotesIncludingDeleted(state.notes, result));
+    const merged = all.filter((note) => note.deletedAt <= 0);
+    const acknowledged = result.some((note) => dirtyBefore && localNotes.some((local) => local.id === note.id));
+    const previousNotes = state.notes;
+    const previousTombstones = state.noteTombstones || [];
+    const previousDirty = state.notesDirty;
+    const previousLastSyncAt = state.notesLastSyncAt;
+    state = { ...state, notes: merged, noteTombstones: all.filter((note) => note.deletedAt > 0), notesDirty: !acknowledged, notesLastSyncAt: Date.now() };
+
+    if (!saveSettings()) {
+      state = { ...state, notes: previousNotes, noteTombstones: previousTombstones, notesDirty: previousDirty, notesLastSyncAt: previousLastSyncAt };
+      throw new Error('Notes could not be persisted; local edits are retained in memory.');
+    }
+    notesSyncError = state.notesDirty ? 'Waiting for desktop to confirm local note updates.' : null;
+    broadcast();
+  });
+  notesSyncJob = operation.catch(() => {});
+  try { await operation; }
+  catch (failure) {
+    if (generation === notesSyncGeneration && state.notesEnabled) notesSyncError = `LAN sync failed (${failure.message}).`;
+  } finally {
+    if (generation === notesSyncGeneration && state.notesEnabled) {
+      broadcast(); scheduleNotesSync(dirtyBefore ? 5000 : 15_000);
+    }
+  }
+}
+
+async function startNotesServer(generation = notesSyncGeneration) {
+  if (!state.notesEnabled || generation !== notesSyncGeneration) return;
+  if (notesServer) { const previous = notesServer; notesServer = null; await previous.close(); }
+  if (!state.notesEnabled || generation !== notesSyncGeneration) return;
+  try {
+    const server = notesSync.createServer({ token: state.notesToken,
+      getNotes: () => notesWithTombstones(state.notes, state.noteTombstones || []),
+      onNotes: (incoming) => {
+        const previous = state.notes;
+        const previousTombstones = state.noteTombstones || [];
+        const previousDirty = state.notesDirty;
+        const all = notesWithTombstones(previousTombstones, notesSync.mergeNotesIncludingDeleted(previous, incoming));
+        const removed = previous.filter((note) => all.some((item) => item.id === note.id && item.deletedAt > 0));
+        const merged = all.filter((note) => note.deletedAt <= 0);
+        const hasNewNotes = incoming.some((note) => !previous.some((old) => old.id === note.id) && !previousTombstones.some((old) => old.id === note.id));
+        const nextDirty = previousDirty === true || hasNewNotes || removed.length > 0;
+        state = { ...state, notes: merged, noteTombstones: all.filter((note) => note.deletedAt > 0), notesDirty: nextDirty };
+        if (!saveSettings()) {
+          state = { ...state, notes: previous, noteTombstones: previousTombstones, notesDirty: previousDirty };
+          notesSyncError = 'Notes could not be saved; received updates were not acknowledged.';
+          throw new Error(notesSyncError);
+        }
+        notesSyncError = null;
+        broadcast();
+        scheduleNotesSync(250);
+      },
+    });
+    await server.start();
+    if (!state.notesEnabled || generation !== notesSyncGeneration) { await server.close(); return; }
+    notesServer = server;
+    notesSyncError = null;
+  } catch (failure) {
+    if (generation !== notesSyncGeneration) return;
+    notesServer = null;
+    notesSyncError = `LAN sync unavailable (${failure.message}).`;
+  }
+}
+
+function openNotesWindow() {
+  if (notesWindow && !notesWindow.isDestroyed()) { notesWindow.show(); notesWindow.focus(); return; }
+  notesWindow = new BrowserWindow({ width: 660, height: 760, minWidth: 420, minHeight: 480,
+    title: 'Bop · Quick notes', backgroundColor: '#F7F5FA',
+    webPreferences: { preload: path.join(__dirname, 'notes-preload.js'), contextIsolation: true,
+      nodeIntegration: false, sandbox: false, additionalArguments: [`--bop-theme=${resolveTheme()}`] },
+  });
+  notesWindow.loadFile(path.join(__dirname, '..', 'renderer', 'notes.html'));
+  notesWindow.on('closed', () => { notesWindow = null; });
 }
 
 function registerIpc() {
   ipcMain.handle('bop:snapshot', () => snapshot());
+  ipcMain.handle('bop:notes-snapshot', () => ({ notes: state.notes, notesSync: snapshot().notesSync, theme: resolveTheme() }));
+  ipcMain.handle('bop:notes-paste-image', async () => {
+    const image = clipboard.readImage();
+    if (image.isEmpty()) return { ok: false, error: 'No image was found on the clipboard.' };
+    const size = image.getSize();
+    const resized = size.width > 1280 || size.height > 1280
+      ? image.resize({ width: Math.min(1280, size.width), height: Math.min(1280, size.height), quality: 'good' }) : image;
+    const bytes = resized.toJPEG(82);
+    if (bytes.length > notesSync.MAX_IMAGE_BYTES) return { ok: false, error: 'Clipboard image is over 500 KB; choose a smaller image.' };
+    return { ok: true, image: bytes.toString('base64'), mime: 'image/jpeg' };
+  });
+  ipcMain.handle('bop:notes-copy-pairing', async () => {
+    if (!state.notesEnabled || !state.notesToken) return { ok: false, error: 'Start LAN sync before pairing.' };
+    const pairing = notesSync.makePairingCode(state.notesToken);
+    if (!pairing.code) return { ok: false, error: 'No private Wi‑Fi address is available.' };
+    clipboard.writeText(pairing.code);
+    return { ok: true, addresses: pairing.addresses, port: pairing.port };
+  });
+  ipcMain.handle('bop:notes-delete', (_event, id) => {
+    if (typeof id !== 'string') return { ok: false, error: 'Invalid note.' };
+    const note = state.notes.find((item) => item.id === id);
+    if (!note) return { ok: false, error: 'That note no longer exists.' };
+    const deletedAt = Date.now();
+    const previous = state.notes;
+    const previousTombstones = state.noteTombstones || [];
+    const tombstone = notesSync.normalizeNote({ ...note, text: '', image: '', mime: '', deletedAt });
+    const previousDirty = state.notesDirty;
+    state = { ...state, notes: state.notes.filter((item) => item.id !== id),
+      noteTombstones: notesWithTombstones(previousTombstones, [tombstone]), notesDirty: true };
+    if (!saveSettings()) { state = { ...state, notes: previous, noteTombstones: previousTombstones, notesDirty: previousDirty }; return { ok: false, error: 'Could not save deletion; the note was kept.' }; }
+
+    broadcast(); scheduleNotesSync(0);
+    return { ok: true };
+  });
+  ipcMain.handle('bop:notes-add', (_event, value) => {
+    if (!value || typeof value !== 'object' || (value.text != null && typeof value.text !== 'string') ||
+        (value.image != null && typeof value.image !== 'string') || (value.mime != null && typeof value.mime !== 'string')) {
+      return { ok: false, error: 'That note is not valid.' };
+    }
+    const note = notesSync.normalizeNote({ ...value, id: randomUUID(), sender: 'Desktop', timestamp: Date.now() });
+    if (!note) return { ok: false, error: 'Add some text or a supported image first.' };
+    const previous = state.notes;
+    const previousTombstones = state.noteTombstones || [];
+    const previousDirty = state.notesDirty;
+    state = { ...state, notes: notesSync.mergeNotes(state.notes, [note]), noteTombstones: previousTombstones.filter((item) => item.id !== note.id), notesDirty: true };
+    if (!saveSettings()) { state = { ...state, notes: previous, noteTombstones: previousTombstones, notesDirty: previousDirty }; return { ok: false, error: 'Could not save this note. Remove older images and try again.' }; }
+    broadcast(); scheduleNotesSync(0); return { ok: true, note };
+  });
+  ipcMain.handle('bop:notes-enable', async (_event, enabled) => {
+    const result = await setNotesSync(enabled === true);
+    return { ok: !notesSyncError, error: notesSyncError, status: result };
+  });
+  ipcMain.on('bop:notes-changed', (_event) => { if (notesWindow && !notesWindow.isDestroyed()) notesWindow.webContents.send('bop:notes-changed'); });
+  ipcMain.handle('bop:notes-settings-enable', async (_event, enabled) => {
+    const status = await setNotesSync(enabled === true);
+    return { ok: !notesSyncError, status, error: notesSyncError };
+  });
+  ipcMain.on('bop:open-notes', () => openNotesWindow());
+  ipcMain.handle('bop:notes-open', () => { openNotesWindow(); return { ok: true }; });
 
   ipcMain.handle('bop:add-space', (_event, request) => {
     const id = spaces.nextFree(state);
@@ -1120,8 +1347,12 @@ function registerIpc() {
     broadcast();
     return { ok: true, space: spaces.accountFor(state, id) };
   });
-  ipcMain.handle('bop:set-preference', (_event, key, value) => {
+  ipcMain.handle('bop:set-preference', async (_event, key, value) => {
     if (key === 'theme' && ['system', 'light', 'dark'].includes(value)) state = { ...state, theme: value };
+    if (key === 'notesSync') {
+      const status = await setNotesSync(value === true);
+      return { ok: !notesSyncError, status, error: notesSyncError };
+    }
     if (key === 'watchWhileRunning') state = { ...state, watchWhileRunning: value === true };
     if (key === 'messageSound') state = { ...state, messageSound: value === true };
     if (key === 'bubble') { setBubbleRunning(value === true); return { ok: true }; }
@@ -1451,6 +1682,24 @@ async function smokeRun() {
   record('packaged-files', JSON.stringify({ packaged: app.isPackaged, iconEmpty: icon.isEmpty(), icon: icon.getSize(), missingFiles }));
   if (icon.isEmpty()) throw new Error(`the tray icon did not load from ${iconPath} (packaging problem)`);
   if (missingFiles.length) throw new Error(`the packaged app is missing ${missingFiles.join(', ')}`);
+  const notesFiles = ['notes-sync.js', 'notes-preload.js'].map((name) => path.join(__dirname, name))
+    .concat(['notes.html', 'notes.js'].map((name) => path.join(__dirname, '..', 'renderer', name)));
+  const missingNotesFiles = notesFiles.filter((file) => !fs.existsSync(file)).map((file) => path.relative(path.join(__dirname, '..'), file));
+  if (missingNotesFiles.length) throw new Error(`the notes feature is missing from the package: ${missingNotesFiles.join(', ')}`);
+  const notesToken = randomBytes(32).toString('hex');
+  const noteRead = notesSync.normalizeNote({ id: 'android-note-1', text: 'encrypted LAN round trip', sender: 'Android', timestamp: 1 });
+  let syncedNotes = [];
+  const notesServer = notesSync.createServer({ token: notesToken, port: 0, host: '127.0.0.1',
+    getNotes: () => syncedNotes, onNotes: (incoming) => { syncedNotes = incoming; } });
+  const address = await notesServer.start();
+  try {
+    const merged = await notesSync.syncWithDesktop('127.0.0.1', address.port, notesToken, [noteRead]);
+    record('linked-notes-sync', JSON.stringify({ count: merged.length, sender: merged[0]?.sender }));
+    if (merged.length !== 1 || merged[0].sender !== 'Android') throw new Error('the Android-compatible encrypted notes client did not complete its LAN round trip');
+    const deleted = notesSync.normalizeNote({ ...noteRead, text: '', deletedAt: Date.now() });
+    const afterDelete = await notesSync.syncWithDesktop('127.0.0.1', address.port, notesToken, [deleted]);
+    if (afterDelete.length !== 0 || syncedNotes.length !== 0) throw new Error('a note deleted on a paired device was not removed from the desktop');
+  } finally { await notesServer.close(); }
 
   // 0b. A fresh profile starts with the bubble running, keeps its pages alive, and asks the machine to
   //     launch Bop at sign-in — the three things that have to be true before the first message arrives.
@@ -2209,7 +2458,7 @@ async function smokeRun() {
 
 if (singleInstance) app.whenReady().then(async () => {
   state = loadSettings();
-  if (!SMOKE) applyAutoStart(); // A smoke run must never write a start-up entry on this machine.
+  if (!SMOKE && !LIVE_CHECK) applyAutoStart(); // Verification must never change this machine's startup registration.
   registerIpc();
   // The operating system's light/dark switch is a live setting, so every window has to be told when it
   // changes: with the app set to "System colours", flipping Windows to dark used to leave every open
@@ -2219,7 +2468,7 @@ if (singleInstance) app.whenReady().then(async () => {
   createShellWindow();
   if (state.bubble) createBubble();
   createTray();
-  if (!SMOKE) for (const id of state.loadedSlots) loadSpaceInBackground(id);
+  if (!SMOKE || LIVE_CHECK) for (const id of state.loadedSlots) loadSpaceInBackground(id);
 
   if (SMOKE) {
     try {
@@ -2247,11 +2496,15 @@ if (singleInstance) app.whenReady().then(async () => {
     return;
   }
 
-  scheduleWatcher();
+  if (!LIVE_CHECK) scheduleWatcher();
   if (SMOKE_ACTIVE) setTimeout(() => readAlertingSpaces(), 5_000);
-
+  if (state.notesEnabled) {
+    notesSyncGeneration += 1;
+    await startNotesServer(notesSyncGeneration);
+    scheduleNotesSync(0);
+  }
   app.on('activate', () => { if (!shellWindow) createShellWindow(); });
 });
 
-app.on('before-quit', () => { app.isQuitting = true; if (state) saveSettings(); });
+app.on('before-quit', () => { app.isQuitting = true; if (notesServer) void notesServer.close(); if (state) saveSettings(); });
 app.on('window-all-closed', () => { if (!SMOKE) app.quit(); });

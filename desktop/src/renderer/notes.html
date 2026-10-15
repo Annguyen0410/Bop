@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bop notes</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { overflow: auto; }
+    .notes-shell { max-width: 920px; margin: auto; padding: 26px; }
+    .notes-head { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+    .notes-head h1 { flex:1; margin:0; }
+    .notes-list { display:flex; flex-direction:column; gap:12px; margin:18px 0; }
+    .note-item { max-width:78%; padding:12px 14px; border-radius:18px; background:var(--surface); border:1px solid color-mix(in srgb,var(--muted) 18%,transparent); overflow-wrap:anywhere; }
+    .note-item.mine { align-self:flex-end; background:var(--lilac); color:var(--ink); }
+    .note-item img { display:block; max-width:min(100%,420px); max-height:320px; object-fit:contain; border-radius:12px; margin-top:8px; }
+    .note-meta { font-size:11px; color:var(--muted); margin-top:7px; }
+    .note-compose { position:sticky; bottom:0; display:flex; gap:10px; align-items:flex-end; background:var(--bg); padding:12px 0; }
+    .note-compose textarea { flex:1; min-height:56px; max-height:180px; resize:vertical; border:1px solid color-mix(in srgb,var(--muted) 30%,transparent); border-radius:16px; padding:12px; background:var(--surface); }
+    .pairing { padding:12px; border-radius:14px; background:var(--surface-2); font-size:12px; color:var(--muted); }
+    .pairing code { user-select:all; overflow-wrap:anywhere; color:var(--text); }
+    .pairing-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .note-toolbar { display:flex; gap:6px; justify-content:flex-end; margin-top:8px; }
+    .note-toolbar button { padding:5px 9px; font-size:11px; }
+  </style>
+</head>
+<body>
+  <main class="notes-shell">
+    <div class="notes-head"><div class="brand-mark">✎</div><h1>Quick notes</h1><button class="ghost" id="notes-refresh">Refresh</button></div>
+    <div class="pairing" id="pairing"></div>
+    <div class="pairing-actions" id="pairing-actions" hidden>
+      <button class="ghost" id="copy-pairing" type="button">Copy pairing code</button>
+    </div>
+    <div class="card-actions"><button class="ghost" id="notes-toggle-sync" type="button">Start LAN sync</button></div>
+    <div class="empty" id="notes-empty">Notes you add here appear in the Android app when both devices are on the same Wi‑Fi and paired.</div>
+    <div class="notes-list" id="notes-list" aria-live="polite"></div>
+    <form class="note-compose" id="note-form">
+      <input id="note-image" type="file" accept="image/*" hidden />
+      <button class="ghost" id="attach-image" type="button" title="Attach an image">＋ Image</button>
+      <textarea id="note-text" maxlength="4000" placeholder="Write a note…" aria-label="Write a note"></textarea>
+      <button class="primary" type="submit">Add note</button>
+    </form>
+  </main>
+  <script src="notes.js"></script>
+</body>
+</html>

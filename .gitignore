@@ -25,6 +25,8 @@ keystore.properties
 # Bop Desktop: the Electron binary and npm tree are reinstalled with `npm install`.
 desktop/node_modules/
 desktop/dist/
+# The portable build the prepackaged config writes, and its unpacked staging tree.
+desktop/dist-portable-final/
 
 # Bop Desktop: throwaway browser profiles and release smoke evidence, local only.
 desktop/tmp/

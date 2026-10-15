@@ -14,6 +14,10 @@ const themeArgument = process.argv.find((value) => value.startsWith('--bop-theme
 contextBridge.exposeInMainWorld('bop', {
   initialTheme: themeArgument ? themeArgument.slice('--bop-theme='.length) : null,
   snapshot: () => ipcRenderer.invoke('bop:snapshot'),
+  openNotes: () => ipcRenderer.invoke('bop:notes-open'),
+  setNotesSync: (enabled) => ipcRenderer.invoke('bop:notes-enable', enabled === true),
+  copyNotesPairing: () => ipcRenderer.invoke('bop:notes-copy-pairing'),
+  saveNotesPairingQr: () => ipcRenderer.invoke('bop:notes-save-pairing-qr'),
 
   addSpace: (request) => ipcRenderer.invoke('bop:add-space', request || {}),
   removeSpace: (id) => ipcRenderer.invoke('bop:remove-space', id),

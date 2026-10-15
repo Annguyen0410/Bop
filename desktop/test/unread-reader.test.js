@@ -129,7 +129,7 @@ test('the payload format is exactly the one Kotlin decodes', () => {
 
 test('every catalog app has a descriptor, and no site claims DOM readiness without evidence', () => {
   const source = fs.readFileSync(hubAppsPath, 'utf8');
-  const catalog = [...source.matchAll(/HubApp\("([a-z0-9]+)"/g)].map((match) => match[1]);
+  const catalog = [...source.matchAll(/HubApp\(\s*"([a-z0-9]+)"/g)].map((match) => match[1]);
   assert.ok(catalog.length >= 19, `expected the full catalog, parsed ${catalog.length} ids`);
   assert.deepStrictEqual(Object.keys(reader.SITES).sort(), catalog.sort(),
     'a new catalog app must get a descriptor, and a removed app must lose its own');

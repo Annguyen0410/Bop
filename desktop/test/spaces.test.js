@@ -117,12 +117,15 @@ test('a custom space only ever allows the host the user typed', () => {
 
 test('catalog spaces allow their own domains and nothing else', () => {
   const messenger = spaces.accountFor(spaces.defaultState(), 'A');
+  assert.strictEqual(spaces.homeFor(messenger), 'https://www.facebook.com/messages/');
   assert.ok(spaces.pageAllowed(messenger, 'https://www.messenger.com/'));
   assert.ok(spaces.pageAllowed(messenger, 'https://m.messenger.com/'));
   assert.ok(!spaces.pageAllowed(messenger, 'https://messenger.com.evil.test/'));
   assert.ok(!spaces.pageAllowed(messenger, 'http://www.messenger.com/'));
   const skype = spaces.enableSlot(spaces.defaultState(), 'C', { appId: 'skype' });
   assert.ok(spaces.pageAllowed(spaces.accountFor(skype, 'C'), 'https://login.live.com/'));
+  const facebook = spaces.accountFor(spaces.enableSlot(spaces.defaultState(), 'D', { appId: 'facebook' }), 'D');
+  assert.strictEqual(spaces.homeFor(facebook), 'https://www.facebook.com/');
 });
 
 test('every catalog entry is a real https home with at least one host, and both kinds are populated', () => {
@@ -318,11 +321,16 @@ test('a fresh profile is already a monitor: bubble on, starts with the machine, 
   assert.strictEqual(fresh.bubble, true);
   assert.strictEqual(fresh.startAtLogin, true);
   assert.strictEqual(fresh.keepPagesAlive, true);
+  assert.equal(fresh.notesEnabled, false);
+  assert.equal(fresh.notesToken, '');
+  assert.deepEqual(fresh.notes, []);
   assert.strictEqual(spaces.normalize({ version: spaces.STATE_VERSION }).bubble, true, 'a file with no bubble field starts one');
   assert.strictEqual(spaces.normalize({ version: spaces.STATE_VERSION }).startAtLogin, true);
 
   // From version 3 on the stored value is the user's own choice, in both directions.
   const off = spaces.normalize({ version: spaces.STATE_VERSION, bubble: false, startAtLogin: false, keepPagesAlive: false });
+  assert.equal(spaces.normalize({ version: 3, bubble: false }).bubble, false, 'migrating to new Facebook Messenger entry preserves an opt-out');
+  assert.equal(spaces.normalize({ version: 3, spaces: [{ id: 'A', appId: 'messenger' }], bubble: false }).spaces[0].appId, 'messenger', 'existing Messenger choices stay unchanged');
   assert.strictEqual(off.bubble, false);
   assert.strictEqual(off.startAtLogin, false);
   assert.strictEqual(off.keepPagesAlive, false);

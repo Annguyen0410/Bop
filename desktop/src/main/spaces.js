@@ -80,8 +80,8 @@ const ACCENTS = {
  */
 const APPS = [
   // ---- social ---------------------------------------------------------------------------------
-  { id: 'messenger', label: 'Messenger', kind: 'social', home: 'https://www.messenger.com/', hosts: ['facebook.com', 'messenger.com'], login: 'Sign in with your Facebook account. Each space gets its own cookie jar, so two Facebook logins run side by side.' },
-  { id: 'facebook', label: 'Facebook', kind: 'social', home: 'https://www.facebook.com/messages', hosts: ['facebook.com', 'messenger.com'], login: "The Facebook website including its messages page. Facebook's own notifications mix likes, job ads and page posts with messages, so read the card title before trusting it." },
+  { id: 'messenger', label: 'Messenger', kind: 'social', home: 'https://www.facebook.com/messages/', hosts: ['facebook.com', 'messenger.com'], login: 'Sign in on Facebook and you land directly in Messages. Each space gets its own cookie jar, so separate Facebook accounts stay separate.' },
+  { id: 'facebook', label: 'Facebook', kind: 'social', home: 'https://www.facebook.com/', hosts: ['facebook.com', 'messenger.com'], login: "The Facebook website. Facebook's own notifications mix likes, job ads and page posts with messages, so read the card title before trusting it." },
   { id: 'instagram', label: 'Instagram', kind: 'social', home: 'https://www.instagram.com/direct/inbox/', hosts: ['instagram.com', 'facebook.com'], login: 'Sign in normally. Two spaces can hold two Instagram accounts at once.' },
   { id: 'whatsapp', label: 'WhatsApp', kind: 'social', home: 'https://web.whatsapp.com/', hosts: ['whatsapp.com', 'whatsapp.net'], login: 'Link this computer by scanning the QR code with WhatsApp on your phone. WhatsApp limits how many devices can be linked.' },
   { id: 'tiktok', label: 'TikTok', kind: 'social', home: 'https://www.tiktok.com/messages', hosts: ['tiktok.com'], login: 'Sign in with your TikTok account. Notifications arrive from the website while the space is loaded.' },
@@ -201,7 +201,8 @@ function openTarget(space) {
 
 const DEFAULT_SLOTS = ['A', 'B'];
 /** Bumped when a stored file needs a one-time repair on read; see [normalize]. */
-const STATE_VERSION = 3;
+const STATE_VERSION = 4;
+const BUBBLE_VERSION = 3;
 /** The version that introduced per-kind layouts; a file older than this gets its layout repaired once. */
 const LAYOUT_VERSION = 2;
 const DEFAULT_WATCH_MINUTES = 10;
@@ -398,6 +399,10 @@ function defaultState() {
     // see [spaceView] for what that trades against.
     keepPagesAlive: true,
     monitorState: {}, // Unread metadata only. Never titles, sender names or message contents.
+    notesEnabled: false,
+    notesToken: '',
+    notes: [],
+    noteTombstones: [],
   };
 }
 
@@ -560,6 +565,8 @@ function normalize(raw) {
   }
   const stored = Array.isArray(raw.slots) ? raw.slots : DEFAULT_SLOTS;
   const slots = [...new Set(stored.filter((id) => ordinalForName(id) !== null))].sort(compareNames);
+  const notesSync = require('./notes-sync.js');
+  const allNotes = notesSync.mergeNotesIncludingDeleted([], raw.notes);
   return {
     version: STATE_VERSION,
     spaces: spaces.sort((left, right) => compareNames(left.id, right.id)),
@@ -569,7 +576,7 @@ function normalize(raw) {
     // A file written before version 3 cannot tell "the user stopped the bubble" from "nobody ever
     // started one" — the old default was off, so every such file says false. The bubble is therefore
     // switched on once, and from version 3 on the stored value is the user's own choice.
-    bubble: version >= STATE_VERSION ? raw.bubble !== false : true,
+    bubble: version >= BUBBLE_VERSION ? raw.bubble !== false : true,
     startAtLogin: raw.startAtLogin !== false,
     keepPagesAlive: raw.keepPagesAlive !== false,
     bubblePrefs: normalizeBubblePrefs(raw.bubblePrefs),
@@ -579,6 +586,10 @@ function normalize(raw) {
       const unread = raw.monitorState && raw.monitorState[id] && raw.monitorState[id].unread;
       return [id, { unread: Number.isInteger(unread) && unread >= 0 && unread <= 99 ? unread : null }];
     })),
+    notesEnabled: raw.notesEnabled === true,
+    notesToken: typeof raw.notesToken === 'string' && /^[a-f0-9]{64}$/i.test(raw.notesToken) ? raw.notesToken : '',
+    notes: allNotes.filter((note) => note.deletedAt <= 0),
+    noteTombstones: allNotes.filter((note) => note.deletedAt > 0),
   };
 }
 

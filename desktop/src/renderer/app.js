@@ -128,6 +128,7 @@ function card(space) {
 function renderPage() {
   if (page === 'spaces') return renderSpaces();
   if (page === 'alerts') return renderAlerts();
+  if (page === 'notes') return renderNotes();
   if (page === 'settings') return renderSettings();
   return renderGuide();
 }
@@ -155,6 +156,20 @@ function renderSpaces() {
       readings and notification previews are not written to disk. Settings and opened-space ids are saved.
     </div>`;
   el('hero-add').addEventListener('click', () => openPicker());
+}
+
+function renderNotes() {
+  const sync = state.notesSync;
+  el('main').innerHTML = `
+    <div class="section-title"><h2>Quick notes</h2><span>Text and images · shared over your private Wi‑Fi</span></div>
+    <div class="card"><p>Open a small chat-like notepad and write a note or attach an image. Android and desktop merge notes while both are online on the same private network.</p>
+      <div class="card-actions"><button class="primary" id="open-notes">Open quick notes</button><button class="${sync.enabled ? 'primary' : 'ghost'}" id="toggle-notes-sync">${sync.enabled ? 'Stop LAN sync' : 'Start LAN sync'}</button></div>
+      ${sync.enabled ? `<div class="note">${sync.running ? 'Listening only on your private Wi‑Fi.' : esc(sync.error || 'Starting LAN listener…')}<br/>Pair code: <code>${esc(sync.pairingCode || 'No private Wi‑Fi address found; connect to Wi‑Fi then refresh.')}</code><br/><b>Encrypted end-to-end.</b> Keep the code private; turn sync off to revoke it.</div>` : '<div class="note">LAN sync is off until you enable it. Notes stay on this computer.</div>'}
+    </div>
+    <div class="section-title"><h2>Recent notes</h2><span>${state.notes.length}</span></div>
+    ${state.notes.length ? [...state.notes].slice(-20).reverse().map(note => `<div class="alert"><div style="flex:1"><div class="row-title">${esc(note.sender)} · ${esc(new Date(note.timestamp).toLocaleString())}</div>${note.text ? `<div class="body">${esc(note.text)}</div>` : ''}${note.image ? `<div class="body">▧ Image attached</div>` : ''}</div></div>`).join('') : '<div class="empty">No notes yet. Open Quick notes to add one.</div>'}`;
+  el('open-notes').addEventListener('click', () => window.bop.openNotes());
+  el('toggle-notes-sync').addEventListener('click', async () => { await window.bop.setNotesSync(!state.notesSync.enabled); await refresh(); });
 }
 
 function renderAlerts() {
@@ -282,6 +297,13 @@ function renderSettings() {
     </div>
 
     <div class="card" style="margin-top:14px">
+      <h3>Linked notes</h3>
+      <p>A private, end-to-end encrypted connection lets your Android and desktop notes meet on the same Wi‑Fi. Images are supported. No cloud account or relay.</p>
+      <div class="card-actions"><button class="primary" id="settings-notes-open">Open quick notes</button><button class="${state.notesSync.enabled ? 'primary' : 'ghost'}" id="settings-notes-toggle">${state.notesSync.enabled ? 'Stop LAN sync' : 'Start LAN sync'}</button></div>
+      ${state.notesSync.enabled ? `<div class="note">${state.notesSync.running ? 'Listening' : esc(state.notesSync.error || 'Starting')} · ${esc(state.notesSync.addresses[0] || 'No private IPv4 address found')}:${state.notesSync.port}<br/>Pairing token: <code>${esc(state.notesSync.token)}</code><br/>LAN only · encrypted. Keep the token private.</div>` : ''}
+    </div>
+
+    <div class="card" style="margin-top:14px">
       <h3>Watching</h3>
       <p>Re-read watched pages while Bop is running.</p>
       <div class="card-actions">
@@ -315,7 +337,8 @@ function renderSettings() {
         <dt>Spaces on disk</dt><dd>${state.spaces.length}</dd>
       </dl>
       ${state.diskError ? `<div class="note warn">${esc(state.diskError)}</div>` : ''}
-    </div>`;
+    </div>`;    el('settings-notes-open').addEventListener('click', () => window.bop.openNotes());
+  el('settings-notes-toggle').addEventListener('click', async () => { await window.bop.setNotesSync(!state.notesSync.enabled); await refresh(); });
   for (const button of el('main').querySelectorAll('[data-theme]')) {
     button.addEventListener('click', async () => { await window.bop.setPreference('theme', button.dataset.theme); await refresh(); });
   }
@@ -357,8 +380,9 @@ const GUIDE = [
   ['08 / Fitting the screen', 'Bop gives every space a narrow pane on purpose, and a desktop website is designed for a wider one — which is where a page ends up with its own dialog half off the edge, close button included, and no way to dismiss it. So a *task panel* asks for the mobile website by default: the same dashboard, laid out for an arbitrary width. A *messaging* space does the opposite, because the mobile site of these services is not their messages page: measured with the phone layout, tiktok.com/messages becomes the For You feed, web.whatsapp.com answers with a landing page, and so do Snapchat and Skype. Those pages cannot raise a message alert, so a social space loads the desktop site. Edit switches either way by hand, and switching reloads the page because the site picks its layout while serving it.'],
   ['09 / Staying on the right site', 'A space only stays on the hosts listed in its card. A link that leaves them is handed to your normal browser instead of being opened inside the space, and a card tells you when that happened. Plain http is refused except on localhost.'],
   ['10 / What is stored', 'Space ids, labels, app choices, opened-space ids and watch settings, encrypted with the operating system’s own key store when one is available — Settings says so if it is not. Cookies and logged-in sessions live in Chromium’s profile for each space. Alerts are kept in memory only and are gone when Bop closes.'],
-  ['11 / Moving between sections and external bubbles', 'Spaces, Alerts, Settings and Guide in the sidebar always switch, including while a space is open: the space steps aside and keeps running in the background pane, session and monitoring intact, so leaving it never needs the ✕. The Bop bubble opens Bop spaces and shows their pending alerts. It cannot accept or embed chat bubbles or windows owned by another application. There is no drag-in feature for external bubbles.'],
-  ['12 / Honest limits', 'A watched space is only read while Bop is running — there is no background service that survives quitting the app. Reading a page cannot see a change that happened and reverted between two checks. Panels can change their layout, which can cause one noisy card; fix it by setting a narrower selector. And no site is scraped: only title and body text are compared, and no credentials or messages are extracted.'],
+  ['11 / Linked notes', 'Desktop and Android can share quick notes and images over the same private Wi‑Fi. Turn LAN sync on in Desktop Settings, keep both apps open on that network, and pair Android with the shown private address and token. Sync is end-to-end encrypted with a one-time random token, with no Internet relay or cloud storage. Anyone on your private network who gets the token can read the notes, so keep it private and stop sync to revoke it.'],
+  ['12 / Moving between sections and external bubbles', 'Spaces, Alerts, Notes, Settings and Guide in the sidebar always switch, including while a space is open: the space steps aside and keeps running in the background pane, session and monitoring intact, so leaving it never needs the ✕. The Bop bubble opens Bop spaces and shows their pending alerts. It cannot accept or embed chat bubbles or windows owned by another application. There is no drag-in feature for external bubbles.'],
+  ['13 / Honest limits', 'A watched space is only read while Bop is running — there is no background service that survives quitting the app. Reading a page cannot see a change that happened and reverted between two checks. Panels can change their layout, which can cause one noisy card; fix it by setting a narrower selector. And no site is scraped: only title and body text are compared, and no credentials or messages are extracted.'],
 ];
 
 function renderGuide() {

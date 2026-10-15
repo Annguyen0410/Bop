@@ -1,0 +1,14 @@
+{
+  "appId": "com.bop.desktop",
+  "productName": "Bop",
+  "directories": { "output": "dist-portable-final" },
+  "files": [
+    "src/**/*",
+    "package.json"
+  ],
+  "nsis": { "artifactName": "Bop-${version}-setup.exe" },
+  "win": {
+    "target": [{ "target": "portable", "arch": ["x64"] }]
+  },
+  "portable": { "artifactName": "Bop-${version}-portable.exe" }
+}
