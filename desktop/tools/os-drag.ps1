@@ -6,6 +6,7 @@
 
 param(
   [switch]$Query,
+  [switch]$MoveTo,
   [switch]$Return,
   [int]$X1 = 0,
   [int]$Y1 = 0,
@@ -34,6 +35,14 @@ function Get-Cursor {
 if ($Query) {
   $at = Get-Cursor
   Write-Output "$($at[0]),$($at[1])"
+  exit 0
+}
+
+# Put the pointer back where the run found it, without pressing anything: the drag above leaves the cursor
+# at the drop point, and a verification run must not move the user's pointer as a side effect.
+if ($MoveTo) {
+  [BopTools.Pointer]::SetCursorPos($X1, $Y1) | Out-Null
+  Write-Output "$X1,$Y1"
   exit 0
 }
 

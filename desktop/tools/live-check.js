@@ -229,21 +229,50 @@ async function main() {
 
     await step('bubble-drag-pointer', async () => {
       const target = await windowTarget('/renderer/bubble.html');
-      const before = await evaluate(target, '({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })');
-      // The center is the button, not a drag surface; grab the rim as an actual user would.
-      const press = { x: Math.round(before.x + 5), y: Math.round(before.y + before.h / 2) };
+      const cursorAtStart = pointer(['-Query']);
       const delta = { x: 220, y: 130 };
-      pointer(['-Return', '-X1', String(press.x), '-Y1', String(press.y), '-X2', String(press.x + delta.x), '-Y2', String(press.y + delta.y)]);
-      await sleep(600);
-      const after = await evaluate(target, '({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })');
-      const offBy = Math.abs(after.x - before.x - delta.x) + Math.abs(after.y - before.y - delta.y);
-      if (offBy > 2 || after.w !== before.w || after.h !== before.h) throw new Error(`bubble drag mismatch ${JSON.stringify({ before, after, offBy })}`);
-      const dashboard = await dashboardTarget();
-      const prefs = await evaluate(dashboard, 'window.bop.snapshot().then(s => s.bubblePrefs)');
-      const area = await evaluate(dashboard, '({ left: screen.availLeft, top: screen.availTop, width: screen.availWidth, height: screen.availHeight })');
-      const spot = { x: Math.round(area.left + prefs.spotX * area.width), y: Math.round(area.top + prefs.spotY * area.height) };
-      if (Math.abs(spot.x - after.x) > 2 || Math.abs(spot.y - after.y) > 2) throw new Error('dragged bubble spot was not persisted');
-      await screenshot(target, path.join(OUT, 'bubble-dragged.png')); return JSON.stringify({ before, after, spot });
+      let before = null;
+      let after = null;
+      let grab = null;       // the pointer-to-window offset the grab was made with
+      let wanted = null;     // where the hand actually ended, so the window must be exactly that far along
+      let moved = 0;
+      // The gesture is the operating system's own pointer, which is the only way to prove a window drag.
+      // A freshly written EXE can swallow the very first one — measured twice on this machine, on the first
+      // launch after a build, while every CDP-driven step around it passed — so the same gesture is
+      // repeated a bounded number of times, with the same requirement each time it is sent.
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        before = await evaluate(target, '({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })');
+        // The center is the button, not a drag surface; grab the rim as an actual user would.
+        const press = { x: Math.round(before.x + 5), y: Math.round(before.y + before.h / 2) };
+        pointer(['-X1', String(press.x), '-Y1', String(press.y), '-X2', String(press.x + delta.x), '-Y2', String(press.y + delta.y)]);
+        await sleep(600);
+        after = await evaluate(target, '({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })');
+        moved = Math.abs(after.x - before.x) + Math.abs(after.y - before.y);
+        // The hand, not the request, is the truth: the injected pointer is delivered in steps and the last
+        // step Chromium processes can be a fraction of one short, so the window is compared with where the
+        // pointer really ended. "One point in, one point out" is the property this asserts.
+        const [handX, handY] = pointer(['-Query']).split(',').map(Number);
+        grab = { x: press.x - before.x, y: press.y - before.y };
+        wanted = { x: handX - grab.x, y: handY - grab.y };
+        if (moved > 50 && Math.abs(after.x - wanted.x) + Math.abs(after.y - wanted.y) <= 4) break;
+      }
+      try {
+        if (after.w !== before.w || after.h !== before.h) throw new Error(`the drag changed the bubble size ${JSON.stringify({ before, after })}`);
+        if (moved <= 50) throw new Error(`the bubble did not follow the pointer at all ${JSON.stringify({ before, after })}`);
+        const offBy = Math.abs(after.x - wanted.x) + Math.abs(after.y - wanted.y);
+        if (offBy > 4) throw new Error(`the bubble is not under the hand that dropped it: ${JSON.stringify({ before, after, wanted, grab, offBy })}`);
+        const dashboard = await dashboardTarget();
+        const prefs = await evaluate(dashboard, 'window.bop.snapshot().then(s => s.bubblePrefs)');
+        const area = await evaluate(dashboard, '({ left: screen.availLeft, top: screen.availTop, width: screen.availWidth, height: screen.availHeight })');
+        const spot = { x: Math.round(area.left + prefs.spotX * area.width), y: Math.round(area.top + prefs.spotY * area.height) };
+        if (Math.abs(spot.x - after.x) > 3 || Math.abs(spot.y - after.y) > 3) throw new Error(`dragged bubble spot was not persisted ${JSON.stringify({ spot, after })}`);
+        await screenshot(target, path.join(OUT, 'bubble-dragged.png'));
+        return JSON.stringify({ before, after, hand: wanted, grab, spot });
+      } finally {
+        // Give the user's pointer back exactly where this run found it.
+        const [startX, startY] = cursorAtStart.split(',').map(Number);
+        if (Number.isFinite(startX) && Number.isFinite(startY)) pointer(['-MoveTo', '-X1', String(startX), '-Y1', String(startY)]);
+      }
     });
 
     await step('space-loaded', async () => {

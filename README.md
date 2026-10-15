@@ -17,7 +17,7 @@ unchanged, so upgrading does not deliberately reset your logins.
 
 | | File | Notes |
 | --- | --- | --- |
-| **Desktop — Windows 10/11 x64** | [`Bop-0.1.9-portable.exe`](desktop/dist/Bop-0.1.9-portable.exe) · 85 210 117 bytes · sha256 `f16b8f152dcf98a36cfb83c0c5f8b3cb98649289aaf5b39ebe81ec516e44b7f1` | One self-contained file. No installer, nothing added to Program Files, delete the file to remove it. Your spaces and logins live in `%APPDATA%\Bop` and survive an upgrade. |
+| **Desktop — Windows 10/11 x64** | [`Bop-0.2.0-portable.exe`](desktop/dist-portable-final/Bop-0.2.0-portable.exe) · 85 221 386 bytes · sha256 `6d4533bbe7fd5efe8aa8503d34019cafa6246379c1044fd55ddb56eef7c437c6` | One self-contained file. No installer, nothing added to Program Files, delete the file to remove it. Your spaces and logins live in `%APPDATA%\Bop` and survive an upgrade. |
 | **Android — 7.0 (API 24) or newer** | built from source: [`app-debug.apk`](app/build/outputs/apk/debug/app-debug.apk) · [`app-release-unsigned.apk`](app/build/outputs/apk/release/app-release-unsigned.apk) | The release APK is **unsigned**: sign it with your own key before installing it on a phone or handing it to anyone. |
 
 **First launch on Windows will warn you.** Neither file is code-signed, so SmartScreen shows *“Windows
@@ -28,8 +28,8 @@ sign into.
 Check the download before you run it:
 
 ```bash
-sha256sum Bop-0.1.9-portable.exe
-# f16b8f152dcf98a36cfb83c0c5f8b3cb98649289aaf5b39ebe81ec516e44b7f1
+sha256sum Bop-0.2.0-portable.exe
+# 6d4533bbe7fd5efe8aa8503d34019cafa6246379c1044fd55ddb56eef7c437c6
 ```
 
 ## The first five minutes (desktop)
@@ -142,10 +142,10 @@ Needs Node.js and, for the Android app, a JDK and the Android SDK.
 # Desktop (Electron) — Windows x64
 cd desktop
 npm install
-npm test                                       # 86 unit tests
+npm test                                       # 95 unit tests
 npm run smoke                                  # 45-step smoke against the source
-npx electron-builder --win portable --x64      # -> dist/Bop-0.1.9-portable.exe, one file
-npm run smoke:live:exe                         # 15-step live check against that EXE
+npm run dist:portable                          # -> dist-portable-final/Bop-0.2.0-portable.exe, one file
+npm run smoke:live:exe                         # 16-step live check against that EXE
 ```
 
 ```bash

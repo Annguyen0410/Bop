@@ -1,7 +1,7 @@
 {
   "name": "bop-desktop",
   "productName": "Bop",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Bop for desktop: many messaging accounts, one quiet hub. Separate browser session per space.",
   "author": "Bop",
   "private": true,
@@ -12,9 +12,9 @@
     "smoke": "electron . --bop-smoke",
     "smoke:unread": "electron src/main/reader-smoke.js",
     "smoke:live": "node tools/live-check.js",
-    "smoke:live:exe": "node tools/live-check.js --app dist/Bop-0.1.9-portable.exe",
+    "smoke:live:exe": "node tools/live-check.js --app dist-portable-final/Bop-0.2.0-portable.exe",
     "dist": "electron-builder --win --x64",
-    "dist:portable": "electron-builder --win portable --x64"
+    "dist:portable": "electron-builder --config tools/prepackaged-portable.json --win portable --x64"
   },
   "build": {
     "appId": "com.bop.desktop",
