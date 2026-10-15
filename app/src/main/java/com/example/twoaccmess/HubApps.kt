@@ -35,9 +35,11 @@ object HubApps {
     const val DEFAULT_ID = "messenger"
     const val MESSENGER_ID = "messenger"
 
-    val MESSENGER = HubApp("messenger", "Messenger", WebSessionPolicy.HOME, listOf("facebook.com", "messenger.com"),
-        0xFF5375FF.toInt(), "Meta's messaging website. Cards need a Messenger installation bound to the slot.",
-        listOf(MESSENGER_PACKAGE))
+    val MESSENGER = HubApp(
+        "messenger", "Messenger", "https://www.facebook.com/messages/", listOf("facebook.com", "messenger.com"),
+        0xFF5375FF.toInt(), "Facebook's messages page, opened on the Facebook website. Cards need a Messenger installation bound to the slot.",
+        listOf(MESSENGER_PACKAGE),
+    )
     val FACEBOOK = HubApp("facebook", "Facebook", "https://www.facebook.com/", listOf("facebook.com", "messenger.com"),
         0xFF1877F2.toInt(), "The Facebook website, including its messages page. Facebook's own notifications mix likes, comments and page posts with messages, so this app raises no cards from them; Messenger carries those, while a Facebook space that is open still badges its slot off its own tab title.")
     val INSTAGRAM = HubApp("instagram", "Instagram", "https://www.instagram.com/direct/inbox/",

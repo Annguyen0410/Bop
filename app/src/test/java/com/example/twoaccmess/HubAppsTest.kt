@@ -11,6 +11,9 @@ class HubAppsTest {
     @Test fun catalogIsStableAndEveryEntryNamesOneHttpsEntryPoint() {
         assertEquals(HubApps.MESSENGER, HubApps.DEFAULT)
         assertEquals(HubApps.DEFAULT_ID, HubApps.DEFAULT.id)
+        assertEquals("https://www.facebook.com/messages/", HubApps.MESSENGER.home)
+        assertEquals("https://www.facebook.com/", HubApps.FACEBOOK.home)
+        assertTrue(HubApps.MESSENGER.note.contains("Facebook's messages page"))
         assertEquals(19, HubApps.ALL.size)
         assertEquals(HubApps.ALL.size, HubApps.ALL.map { it.id }.distinct().size)
         assertTrue(HubApps.ALL.all { it.id == it.id.lowercase() && it.id.none { c -> c == ' ' } })

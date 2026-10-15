@@ -39,6 +39,7 @@ class WebSessionPolicyTest {
     }
 
     @Test fun acceptsActualHttpsMetaLoginAndMessagingOrigins() {
+        assertEquals("https://www.facebook.com/messages/", WebSessionPolicy.HOME)
         listOf(WebSessionPolicy.HOME, "https://facebook.com/", "https://www.facebook.com/login.php?next=%2Fmessages%2F",
             "https://m.facebook.com/checkpoint/", "https://www.messenger.com/", "https://messenger.com/",
             "https://WWW.FACEBOOK.COM:443/messages/").forEach { assertTrue(it, WebSessionPolicy.allowedNavigation(it)) }

@@ -71,6 +71,13 @@ data class HubState(
     val enabledSlots: List<AccountId> = DEFAULT_SLOTS,
     /** Appearance picked in Setup: follow the phone, or force light/dark. */
     val themeChoice: ThemeChoice = ThemeChoice.DEFAULT,
+    /** Private notes are part of the same AES-GCM encrypted settings file as account bindings. */
+    val notes: List<LinkedNote> = emptyList(),
+    val notesHost: String = "",
+    val notesPort: Int = 38671,
+    val notesToken: String = "",
+    /** Live UI status; intentionally not persisted with note contents or pairing details. */
+    val notesSyncStatus: String = "Not paired",
 ) {
     /** Stable order, two base spaces, and no application-imposed slot count limit. */
     val slots: List<AccountId>

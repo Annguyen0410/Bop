@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,11 @@ object HubRepository {
     private val diskLock = Mutex()
     private lateinit var settings: EncryptedSettings
     private lateinit var appContext: Context
+    private var notesSyncJob: kotlinx.coroutines.Job? = null
+    private var notesSyncGeneration = 0L
+    @Volatile private var notesSyncLastAttempt = 0L
+    @Volatile private var notesSyncLastSuccess = 0L
+    @Volatile private var notesSyncLastError = ""
 
     fun initialize(context: Context) {
         appContext = context.applicationContext
@@ -69,6 +75,7 @@ object HubRepository {
                 // theme preference wins over the restored value so both stay in step.
                 val themed = restored.copy(themeChoice = HubThemeStore.read(context, restored.themeChoice))
                 mutate { current -> themed.copy(ready = true, connected = current.connected, overlayRunning = current.overlayRunning) }
+                startNotesSync()
                 try { SpaceSessions.writeIndex(appContext, state.value) }
                 catch (_: Exception) { mutate { it.copy(settingsError = true) } }
             }
@@ -88,6 +95,84 @@ object HubRepository {
                 } catch (_: Exception) {
                     mutate { it.copy(settingsError = true) }
                 }
+            }
+        }
+    }
+
+    fun linkedNotes(): List<LinkedNote> = state.value.notes
+
+    fun saveLinkedNotes(notes: List<LinkedNote>) {
+        val merged = LinkedNotes.merge(linkedNotes(), notes)
+        mutate { it.copy(notes = merged) }
+        if (::settings.isInitialized) save()
+    }
+
+    fun pairNotes(host: String, port: Int, token: String) {
+        require(LinkedNotes.normalizePrivateHost(host) != null)
+        require(port == 38671 && token.matches(Regex("[a-fA-F0-9]{64}")))
+        notesSyncLastSuccess = 0L
+        notesSyncLastError = ""
+        mutate { it.copy(notesHost = LinkedNotes.normalizePrivateHost(host).orEmpty(), notesPort = port, notesToken = token.trim(), notesSyncStatus = "Paired · connecting…") }
+        startNotesSync()
+        save()
+    }
+
+    fun clearNotesPairing() {
+        notesSyncGeneration += 1
+        notesSyncJob?.cancel(); notesSyncJob = null
+        notesSyncLastSuccess = 0L; notesSyncLastAttempt = 0L; notesSyncLastError = ""
+        mutate { it.copy(notesHost = "", notesPort = 38671, notesToken = "", notesSyncStatus = "Not paired") }
+        if (::settings.isInitialized) save()
+    }
+
+    fun notesSyncStatus(): String {
+        val current = state.value
+        if (current.notesToken.isBlank()) return "Not paired"
+        if (!current.ready) return "Preparing notes"
+        if (notesSyncLastSuccess > 0L) return "Synced ${android.text.format.DateUtils.getRelativeTimeSpanString(notesSyncLastSuccess)}"
+        if (notesSyncLastError.isNotBlank()) return notesSyncLastError
+        return if (notesSyncJob?.isActive == true) "Connecting to desktop…" else current.notesSyncStatus
+    }
+
+    private fun updateNotesSyncStatus(message: String) = mutate { it.copy(notesSyncStatus = message) }
+
+    fun startNotesSync() {
+        notesSyncGeneration += 1
+        val generation = notesSyncGeneration
+        notesSyncJob?.cancel(); notesSyncJob = null
+        if (!state.value.ready) return
+        if (Build.VERSION.SDK_INT >= 37 && appContext.checkSelfPermission("android.permission.ACCESS_LOCAL_NETWORK") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            updateNotesSyncStatus("Allow local network access to sync notes")
+            return
+        }
+        val host = state.value.notesHost
+        val port = state.value.notesPort
+        val token = state.value.notesToken
+        if (host.isBlank() || port !in 1..65535 || token.isBlank()) return
+        notesSyncJob = scope.launch {
+            var delayMs = 2_000L
+            while (kotlinx.coroutines.currentCoroutineContext().isActive && generation == notesSyncGeneration) {
+                try {
+                    notesSyncLastAttempt = System.currentTimeMillis()
+                    val local = linkedNotes()
+                    val merged = kotlinx.coroutines.withContext(Dispatchers.IO) { LinkedNotes.sync(host, port, token, local) }
+                    if (generation != notesSyncGeneration) return@launch
+                    notesSyncLastSuccess = System.currentTimeMillis()
+                    notesSyncLastError = ""
+                    updateNotesSyncStatus("Synced with desktop")
+                    saveLinkedNotes(merged)
+                    delayMs = 15_000L
+                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                catch (failure: Exception) {
+                    notesSyncLastError = when (failure) {
+                        is java.net.SocketTimeoutException -> "Desktop notes sync timed out; retrying."
+                        is java.net.ConnectException -> "Desktop unavailable on this Wi‑Fi; retrying."
+                        else -> "Notes sync failed: ${failure.message?.take(100) ?: "check pairing"}"
+                    }
+                    updateNotesSyncStatus(notesSyncLastError)
+                    delayMs = (delayMs * 2).coerceAtMost(60_000L)
+                }
+                kotlinx.coroutines.delay(delayMs)
             }
         }
     }
@@ -244,15 +329,22 @@ private class EncryptedSettings(context: Context) {
                 AccountId.from(array.optString(index))?.takeIf { id -> bindings.any { it.accountId == id } }
             }
         } ?: HubState.DEFAULT_SLOTS
+        val notes = json.optJSONArray("notes")?.let { array -> (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let(LinkedNotes::parse) } }.orEmpty()
         return HubState(accounts = bindings, disclosureAccepted = json.getBoolean("consent"),
             mirrorAlerts = json.optBoolean("mirror", true), workPreviews = json.optBoolean("workPreviews", false),
-            enabledSlots = slots, themeChoice = ThemeChoice.from(json.optString("theme")))
+            enabledSlots = slots, themeChoice = ThemeChoice.from(json.optString("theme")), notes = LinkedNotes.merge(emptyList(), notes),
+            notesHost = json.optString("notesHost"), notesPort = json.optInt("notesPort", 38671).coerceIn(1, 65535),
+            notesToken = json.optString("notesToken").takeIf { it.matches(Regex("[a-fA-F0-9]{64}")) }.orEmpty())
     }
 
     fun write(state: HubState) {
         val json = JSONObject().put("consent", state.disclosureAccepted).put("mirror", state.mirrorAlerts)
             .put("workPreviews", state.workPreviews).put("theme", state.themeChoice.name)
             .put("slots", JSONArray().apply { state.slots.forEach { put(it.name) } })
+            .put("notes", JSONArray().apply { state.notes.forEach { note -> put(JSONObject()
+                .put("id", note.id).put("text", note.text).put("image", note.image).put("mime", note.mime)
+                .put("sender", note.sender).put("timestamp", note.timestamp).put("deletedAt", note.deletedAt)) } })
+            .put("notesHost", state.notesHost).put("notesPort", state.notesPort).put("notesToken", state.notesToken)
             .put("accounts", JSONArray().apply {
                 state.accounts.forEach { account -> put(JSONObject().put("id", account.accountId.name)
                     .put("label", account.label).put("serial", account.profileSerial ?: JSONObject.NULL)

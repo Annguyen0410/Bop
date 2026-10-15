@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
@@ -61,7 +62,6 @@ open class MainActivity : ComponentActivity() {
     private var nativeTools by mutableStateOf(false)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Screenshots remain allowed.
         enableEdgeToEdge()
         selected = accountId(savedInstanceState?.getString(ACCOUNT_EXTRA) ?: intent.getStringExtra(ACCOUNT_EXTRA).orEmpty())
         nativeTools = savedInstanceState?.getBoolean(NATIVE_TOOLS_EXTRA) ?: intent.getBooleanExtra(NATIVE_TOOLS_EXTRA, false)
@@ -106,6 +106,64 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
     LaunchedEffect(nativeTools) { if (nativeTools) page = "Alerts" else if (page == "Alerts") page = "Spaces" }
     var query by rememberSaveable { mutableStateOf("") }
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteDraft by rememberSaveable { mutableStateOf("") }
+    var noteHost by rememberSaveable { mutableStateOf("") }
+    var notePort by rememberSaveable { mutableStateOf("38671") }
+    var noteToken by rememberSaveable { mutableStateOf("") }
+    var pairingCode by rememberSaveable { mutableStateOf("") }
+    var notesError by remember { mutableStateOf("") }
+    val linkedNotes = state.notes
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(state.ready, state.notesHost, state.notesPort, state.notesToken) {
+        if (state.ready) {
+            noteHost = state.notesHost
+            notePort = state.notesPort.toString()
+            noteToken = state.notesToken
+        }
+    }
+    fun syncNotesNow() {
+        val port = notePort.toIntOrNull() ?: 0
+        scope.launch {
+            try {
+                val merged = withContext(Dispatchers.IO) { LinkedNotes.sync(noteHost, port, noteToken, HubRepository.linkedNotes()) }
+                HubRepository.saveLinkedNotes(merged); notesError = "Synced with desktop."
+            } catch (failure: Exception) { notesError = "Not connected yet: ${failure.message ?: "check Wi‑Fi and the desktop pairing details"}" }
+        }
+    }
+    val localNetworkPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) { HubRepository.startNotesSync(); syncNotesNow() }
+        else notesError = "Allow local network access to connect to your paired desktop."
+    }
+    fun syncNotes() {
+        if (Build.VERSION.SDK_INT >= 37 && ContextCompat.checkSelfPermission(activity, "android.permission.ACCESS_LOCAL_NETWORK") != PackageManager.PERMISSION_GRANTED) {
+            localNetworkPermission.launch("android.permission.ACCESS_LOCAL_NETWORK")
+        } else syncNotesNow()
+    }
+    fun pairNotes() {
+        val parsed = LinkedNotes.parsePairingCode(pairingCode)
+        if (parsed != null) { noteHost = parsed.host; notePort = parsed.port.toString(); noteToken = parsed.token }
+        val port = notePort.toIntOrNull()
+        val privateHost = LinkedNotes.normalizePrivateHost(noteHost)
+        if (privateHost == null || port != 38671 || !noteToken.matches(Regex("[a-fA-F0-9]{64}"))) {
+            notesError = "Enter the desktop's private Wi‑Fi IPv4, port 38671 and 64-character pairing token."; return
+        }
+        noteHost = privateHost
+        HubRepository.pairNotes(noteHost, port, noteToken)
+        notesError = "Paired. Syncing while this app stays open."
+        syncNotes()
+    }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) scope.launch {
+            val caption = noteDraft
+            val picture = withContext(Dispatchers.IO) { LinkedNotes.image(activity, uri) }
+            if (picture == null) notesError = "Couldn't use this picture; choose a smaller image."
+            else {
+                HubRepository.saveLinkedNotes(listOf(LinkedNotes.create(caption, picture.first, picture.second)))
+                noteDraft = ""; notesError = ""
+                syncNotes()
+            }
+        }
+    }
     var appPicker by remember { mutableStateOf<AccountId?>(null) }
     var adding by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<AccountId?>(null) }
@@ -116,7 +174,6 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
     var workConsent by remember { mutableStateOf(false) }
     var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
     val environments = remember(refreshVersion) { HubPlatform.environments(activity) }
-    val scope = rememberCoroutineScope()
     var profileSupport by remember(refreshVersion) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(refreshVersion) { profileSupport = withContext(Dispatchers.IO) { SpaceSessions.supported() } }
     fun feedback(text: String?) { text?.let { Toast.makeText(activity, it, Toast.LENGTH_LONG).show() } }
@@ -163,7 +220,7 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
             Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 1.dp) {
                 Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("Spaces" to "◒", "Alerts" to "◉", "Settings" to "⚙", "Guide" to "?").forEach { (label, glyph) ->
+                    listOf("Spaces" to "◒", "Alerts" to "◉", "Notes" to "✎", "Settings" to "⚙", "Guide" to "?").forEach { (label, glyph) ->
                         val active = page == label
                         Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp))
                             .background(if (active) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
@@ -273,6 +330,46 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
                         OutlinedButton(onClick = { HubNotificationListener.refresh(); refresh() }, modifier = Modifier.weight(1f)) { Text("Refresh") }
                         TextButton(onClick = { HubRepository.clearPreviews(); HubNotifications.clear(activity) }, modifier = Modifier.weight(1f)) { Text("Clear hub cards") }
                     } }
+                }
+                "Notes" -> {
+                    item { PageHeading("Little notes.", "A tiny chat for things worth keeping.") }
+                    item {
+                        SettingsCard("Pair with desktop") {
+                            Text("On desktop Notes, start LAN sync and copy its pairing code. Paste it here, or enter the private IP, port and token separately. Same private Wi‑Fi only; transfers are encrypted.", style = MaterialTheme.typography.bodySmall)
+                            OutlinedTextField(pairingCode, { pairingCode = it.trim().take(180) }, modifier = Modifier.fillMaxWidth().testTag("notes-pairing-code"), label = { Text("Paste desktop pairing code") }, singleLine = true)
+                            OutlinedTextField(noteHost, { noteHost = it.trim().take(15) }, modifier = Modifier.fillMaxWidth().testTag("notes-host"), label = { Text("Desktop private IPv4") }, singleLine = true)
+                            OutlinedTextField(notePort, { notePort = it.filter(Char::isDigit).take(5) }, modifier = Modifier.fillMaxWidth().testTag("notes-port"), label = { Text("Port") }, singleLine = true)
+                            OutlinedTextField(noteToken, { noteToken = it.filter(Char::isLetterOrDigit).take(64) }, modifier = Modifier.fillMaxWidth().testTag("notes-token"), label = { Text("Pairing token") }, singleLine = true)
+                            Text("Sync status: ${state.notesSyncStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { pairNotes() }, modifier = Modifier.weight(1f)) { Text("Pair / sync") }
+                                OutlinedButton(onClick = { HubRepository.clearNotesPairing(); noteToken = ""; notesError = "Pairing removed." }, modifier = Modifier.weight(1f)) { Text("Unpair") }
+                            }
+                            if (notesError.isNotBlank()) Text(notesError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    item {
+                        SettingsCard("Add a note") {
+                            OutlinedTextField(noteDraft, { noteDraft = it.take(4000) }, modifier = Modifier.fillMaxWidth().testTag("note-draft"), label = { Text("Text or reminder") }, minLines = 2, maxLines = 5)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { if (noteDraft.isNotBlank()) { HubRepository.saveLinkedNotes(listOf(LinkedNotes.create(noteDraft))); noteDraft = ""; syncNotes() } }, modifier = Modifier.weight(1f), enabled = noteDraft.isNotBlank()) { Text("Save note") }
+                                OutlinedButton(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("＋ Image") }
+                            }
+                        }
+                    }
+                    val visibleNotes = linkedNotes.filter { it.deletedAt <= 0 }
+                    if (visibleNotes.isEmpty()) item { EmptyCard("Nothing jotted down", "Text notes and images you save here will also appear on the paired desktop.") }
+                    items(visibleNotes.asReversed(), key = { it.id }) { note ->
+                        SettingsCard(note.sender + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(note.timestamp))) {
+                            if (note.text.isNotBlank()) Text(note.text)
+                            if (note.image.isNotBlank()) LinkedNotes.decodeImage(note.image)?.let { bitmap -> Image(bitmap.asImageBitmap(), "Attached note image", Modifier.fillMaxWidth().heightIn(max = 320.dp).clip(RoundedCornerShape(18.dp)), contentScale = ContentScale.Fit) }
+                            TextButton(onClick = {
+                                HubRepository.saveLinkedNotes(linkedNotes + LinkedNotes.tombstone(note))
+                                syncNotes()
+                            }) { Text("Delete on both devices") }
+                        }
+                    }
+                    item { OutlinedButton(onClick = { syncNotes() }, modifier = Modifier.fillMaxWidth()) { Text("Sync now") } }
                 }
                 "Settings" -> {
                     item { PageHeading("Make it yours.", "Small tweaks. Your kind of Bop.") }
