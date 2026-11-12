@@ -62,6 +62,15 @@ class WebSessionPolicyTest {
         }
     }
 
+    @Test fun externalFallbackAcceptsOnlyOrdinaryCredentialFreeHttpsLinks() {
+        listOf("https://www.facebook.com/messages/", "https://m.me/", "https://example.org/path?q=1",
+            "https://example.org:443/").forEach { assertTrue(it, WebSessionPolicy.isSafeExternalHttps(it)) }
+        listOf("http://example.org/", "javascript:alert(1)", "intent://messages/#Intent;end",
+            "https://user:pass@example.org/", "https://example.org:444/", "not a URL", "").forEach {
+            assertFalse(it, WebSessionPolicy.isSafeExternalHttps(it))
+        }
+    }
+
     @Test fun aFreshSpaceUsesTheMobileSiteBecauseThatIsTheLayoutThatFits() {
         // Regression guard. The first release defaulted every space to the desktop agent, so the service
         // served its wide layout: its own dialogs then put their close button outside a phone-sized screen
@@ -73,25 +82,104 @@ class WebSessionPolicyTest {
         assertNotEquals("desktop mode must stay available as a real switch", mobile, WebSessionPolicy.desktopAgent(mobile))
     }
 
-    @Test fun onlyAppsWhosePhoneLayoutHasNoMessagesViewStartOnTheDesktopSite() {
-        // Measured against the live services on 8 October 2026, phone agent versus desktop agent:
-        //   www.tiktok.com/messages -> 302 /foryou (the feed)   vs  302 /login?redirect_url=%2Fmessages
-        //   chat.zalo.me            -> 302 market://details?id=com.zing.zalo   vs  200
-        //   web.whatsapp.com        -> its phone landing page  vs  the chat list
-        // Every other entry point answered the same for both agents, so it keeps the layout that fits.
-        assertEquals(setOf("tiktok", "zalo", "whatsapp"),
+    @Test fun googleEmbeddedBrowserRefusalIsRecognizedOnlyForAiProviderPages() {
+        val title = "This browser or app may not be secure"
+        assertTrue(WebSessionPolicy.isEmbeddedSigninRefusal(HubApps.CHATGPT,
+            "https://accounts.google.com/signin", title))
+        assertFalse(WebSessionPolicy.isEmbeddedSigninRefusal(HubApps.CHATGPT,
+            "https://accounts.google.com.evil.example/signin", title))
+        assertFalse(WebSessionPolicy.isEmbeddedSigninRefusal(HubApps.FACEBOOK,
+            "https://accounts.google.com/signin", title))
+        assertFalse(WebSessionPolicy.isEmbeddedSigninRefusal(HubApps.GEMINI,
+            "https://gemini.google.com/app", title))
+    }
+
+    @Test fun malformedGoogleAuthResponseGetsTheBrowserFallbackOnlyOnAllowedAuthRoutes() {
+        assertTrue(WebSessionPolicy.isGoogleMalformedAuthResponse(HubApps.CHATGPT,
+            "https://accounts.google.com/signin/oauth/v2", 400))
+        assertFalse(WebSessionPolicy.isGoogleMalformedAuthResponse(HubApps.CHATGPT,
+            "https://accounts.google.com/signin/oauth/v2", 403))
+        assertFalse(WebSessionPolicy.isGoogleMalformedAuthResponse(HubApps.CHATGPT,
+            "https://accounts.google.com.evil.example/signin/oauth/v2", 400))
+        assertFalse(WebSessionPolicy.isGoogleMalformedAuthResponse(HubApps.CHATGPT,
+            "https://accounts.google.com/", 400))
+        assertFalse(WebSessionPolicy.isGoogleMalformedAuthResponse(HubApps.FACEBOOK,
+            "https://accounts.google.com/signin/oauth/v2", 400))
+    }
+
+    @Test fun appsNeedingTheDesktopSiteStartThere() {
+        // Measured against the live services, phone agent versus desktop agent:
+        //   www.tiktok.com/messages  -> 302 /foryou (the feed)   vs  302 /login?redirect_url=%2Fmessages
+        //   chat.zalo.me             -> 302 market://details?id=com.zing.zalo   vs  200
+        //   web.whatsapp.com         -> its phone landing page  vs  the chat list
+        //   www.facebook.com/messages/ -> 302 https://m.facebook.com/messages/ (the legacy mobile route,
+        //                                 which answers login.php?…&refsrc=deprecated)  vs  no redirect
+        // The last one is the Messenger regression: the phone layout does not render the messages page, it
+        // leaves it. Instagram's phone web build has no direct inbox at all, so it is in this group too.
+        // AI sign-in providers reject embedded WebViews, and changing the agent does not make them safe.
+        // Keep AI on its responsive layout and expose the external-browser fallback instead.
+        assertEquals(setOf("messenger", "instagram", "tiktok", "zalo", "whatsapp"),
             HubApps.ALL.filter { WebSessionPolicy.defaultDesktop(it) }.map { it.id }.toSet())
-        listOf(HubApps.MESSENGER, HubApps.FACEBOOK, HubApps.INSTAGRAM, HubApps.TELEGRAM, HubApps.DISCORD,
-            HubApps.SNAPCHAT, HubApps.SKYPE).forEach {
+        listOf(HubApps.CHATGPT, HubApps.CLAUDE, HubApps.GEMINI).forEach {
+            assertFalse("${it.id} must not disguise an embedded login as desktop Chrome", WebSessionPolicy.defaultDesktop(it))
+        }
+        listOf(HubApps.FACEBOOK, HubApps.TELEGRAM, HubApps.DISCORD,
+            HubApps.SNAPCHAT, HubApps.SKYPE, HubApps.LINKEDIN, HubApps.REDDIT).forEach {
             assertFalse("${it.id} must keep the phone layout", WebSessionPolicy.defaultDesktop(it))
         }
         // The desktop agent really removes the phone markers, so the service cannot answer with the layout
         // that has no messages page.
         val mobile = "Mozilla/5.0 (Linux; Android 15; Device Build/AP3A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/130.0.6723.91 Mobile Safari/537.36"
-        listOf(HubApps.TIKTOK, HubApps.ZALO, HubApps.WHATSAPP).forEach {
+        listOf(HubApps.MESSENGER, HubApps.INSTAGRAM, HubApps.TIKTOK, HubApps.ZALO, HubApps.WHATSAPP).forEach {
             assertTrue(it.id, WebSessionPolicy.defaultDesktop(it))
             assertFalse(it.id, WebSessionPolicy.desktopAgent(mobile).contains("Mobile"))
+            assertFalse(it.id, WebSessionPolicy.desktopAgent(mobile).contains("; wv"))
         }
+    }
+
+    @Test fun theMessengerRouteItselfIsUnchanged() {
+        // messenger.com was retired; Facebook's own messages page is the route that still exists.
+        assertEquals("https://www.facebook.com/messages/", HubApps.MESSENGER.home)
+        assertEquals("https://www.instagram.com/direct/inbox/", HubApps.INSTAGRAM.home)
+        assertTrue(WebSessionPolicy.allowedFor(HubApps.MESSENGER, HubApps.MESSENGER.home))
+        assertTrue(WebSessionPolicy.allowedFor(HubApps.INSTAGRAM, HubApps.INSTAGRAM.home))
+        // The phone UA's bounce target stays inside the same slot instead of being blocked as foreign.
+        assertTrue(WebSessionPolicy.allowedFor(HubApps.MESSENGER, "https://m.facebook.com/messages/"))
+    }
+
+    @Test fun aStoredLayoutIsNeverDiscardedByTheMigration() {
+        // The promise: a switch the owner flipped outranks a new default. A value stored before the
+        // choice marker existed cannot be proven to be a default, so it is adopted, not deleted.
+        val explicitDesktop = WebSessionPolicy.planLayout(storedRule = 0, storedDesktop = true, storedChoice = false)
+        assertNotNull(explicitDesktop)
+        assertEquals(true, explicitDesktop!!.desktop)
+        assertTrue(explicitDesktop.choice)
+        val explicitMobile = WebSessionPolicy.planLayout(storedRule = 1, storedDesktop = false, storedChoice = false)
+        assertEquals(false, explicitMobile!!.desktop)
+        assertTrue(explicitMobile.choice)
+        // A space that never stored a layout is the only one the rule may move.
+        val untouched = WebSessionPolicy.planLayout(storedRule = 0, storedDesktop = null, storedChoice = false)
+        assertNull(untouched!!.desktop)
+        assertFalse(untouched.choice)
+        // No plan ever deletes a value: the plan type has no way to express a removal.
+        assertEquals(WebSessionPolicy.LAYOUT_RULE, untouched.rule)
+        assertEquals(WebSessionPolicy.LAYOUT_RULE, explicitDesktop.rule)
+    }
+
+    @Test fun theLayoutMigrationRunsOnceAndOnlyOnce() {
+        assertEquals(WebSessionPolicy.LAYOUT_RULE, WebSessionPolicy.planLayout(0, true, false)!!.rule)
+        // Already migrated: the second call must be a no-op, or reopening a space would rewrite its
+        // preferences on every launch.
+        assertNull(WebSessionPolicy.planLayout(WebSessionPolicy.LAYOUT_RULE, true, false))
+        assertNull(WebSessionPolicy.planLayout(WebSessionPolicy.LAYOUT_RULE + 1, null, false))
+    }
+
+    @Test fun theOldPerActivitySwitchCarriesItsValueAcross() {
+        // The very old build wrote "desktop" only on a flip. Keeping the flag but not the value left the
+        // space on the app's default layout while the app reported that it had kept the choice.
+        assertNull(WebSessionPolicy.legacyDesktopChoice(oldHasDesktop = false, oldDesktop = false))
+        assertEquals(false, WebSessionPolicy.legacyDesktopChoice(true, false))
+        assertEquals(true, WebSessionPolicy.legacyDesktopChoice(true, true))
     }
 
     @Test fun diagnosticsNameTheLayoutASpaceActuallyAskedFor() {

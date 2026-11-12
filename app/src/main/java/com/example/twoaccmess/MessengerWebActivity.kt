@@ -1,6 +1,7 @@
 package com.example.twoaccmess
 
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -60,8 +61,12 @@ class DynamicWebActivity : MessengerWebActivity() {
 
 object MessengerWeb {
     const val EXTRA_SLOT = "com.example.twoaccmess.SPACE_ID"
+    /** Per-slot preference holding the conversation that slot was last in, so reopening it returns there. */
+    const val THREAD_KEY = "thread"
     /** Intent extra naming the catalog app ([HubApps]) a slot should open. */
     const val EXTRA_APP = "com.example.twoaccmess.HUB_APP"
+    /** Opens the slot only to erase its browser data, then closes; used when deleting a space. */
+    const val EXTRA_CLEAR = "com.example.twoaccmess.CLEAR_SESSION"
 
     /** Each slot needs its own declared activity so Android gives it its own process and storage. */
     private fun activity(account: AccountId) = when (account) {
@@ -95,6 +100,18 @@ object MessengerWeb {
         return if (HubPlatform.openSettings(context, intent(context, account, app))) null
         else "Android could not open ${app.label} in slot ${account.name}. Open TwoAccMess and try again."
     }
+
+    /**
+     * Erases one slot's browser data inside that slot's own process, which is the only place that can
+     * reach its cookies and WebView profile. Deleting a space calls this first, then removes the slot;
+     * opening a deleted slot is harmless because the activity only clears and finishes.
+     */
+    fun clear(context: Context, account: AccountId, app: HubApp = HubApps.DEFAULT): String? {
+        if (Build.VERSION.SDK_INT < WebSessionPolicy.MIN_ANDROID) return "Embedded web sessions need Android 9 or newer for separate browser storage."
+        val target = intent(context, account, app).putExtra(EXTRA_CLEAR, true)
+        return if (HubPlatform.openSettings(context, target)) null
+        else "Android could not clear ${app.label} in slot ${account.name}. Open TwoAccMess and try again."
+    }
 }
 
 /**
@@ -114,6 +131,9 @@ abstract class MessengerWebActivity : ComponentActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var controls: LinearLayout
     private var browser: WebView? = null
+    /** A user-opened popup (Facebook message tools and identity-provider windows) in this slot's profile. */
+    private var popup: WebView? = null
+    private var popupDialog: Dialog? = null
     private var clearing = false
     private var resumed = false
     /** Starts on the fallback; [configure] then reads the space's own choice or its app's rule. */
@@ -124,6 +144,10 @@ abstract class MessengerWebActivity : ComponentActivity() {
     private val unread = WebUnread.Watch()
     private var titleReady = false
     private var browserConfigured = false
+    /** True when this launch is a deletion: clear this slot's data, then close without reopening it. */
+    private var finishAfterClear = false
+    /** The conversation this slot was last in, so opening a space goes back to the chat, not to the inbox. */
+    private var rememberedThread: String? = null
     private var uploadCallback: android.webkit.ValueCallback<Array<android.net.Uri>>? = null
     private val uploadPicker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         uploadCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data))
@@ -133,22 +157,31 @@ abstract class MessengerWebActivity : ComponentActivity() {
     private fun getSpacePreferences(): android.content.SharedPreferences {
         val current = preferences()
         // Migrate old per-activity settings without touching its cookie directory. The very old build
-        // wrote "desktop" only when the user flipped the switch there, so that value is a real choice.
+        // wrote "desktop" only when the user flipped the switch there, so that value is a real choice and
+        // its value — not just the fact of a choice — is carried across. Dropping the value would leave the
+        // space on the app's default layout while claiming to have honoured the owner's switch.
         if (slot.legacy && !current.contains("migrated")) {
             val old = getPreferences(MODE_PRIVATE)
             val editor = current.edit().putBoolean("web-consent", old.getBoolean("web-consent", false))
                 .putString("app", old.getString("app", null))
                 .putBoolean("migrated", true)
-            if (old.contains("desktop")) editor.putBoolean("desktop-choice", true)
+            WebSessionPolicy.legacyDesktopChoice(old.contains("desktop"), old.getBoolean("desktop", false))
+                ?.let { chosen -> editor.putBoolean("desktop", chosen).putBoolean("desktop-choice", true) }
             editor.apply()
         }
-        // Layout rule 2: an app whose phone layout has no messages view now starts on the desktop site.
-        // A "desktop" value an older build wrote as *its* default is not a choice, so it is dropped once
-        // and the space picks up the rule; a switch the user flipped is kept, because flipping it (and
-        // migrating an old flip, above) sets "desktop-choice".
-        if (current.getInt("layout-rule", 1) < LAYOUT_RULE) {
-            val editor = current.edit().putInt("layout-rule", LAYOUT_RULE)
-            if (!current.getBoolean("desktop-choice", false)) editor.remove("desktop")
+        // Layout rules changed (see [WebSessionPolicy.LAYOUT_RULE]). The plan never removes a stored
+        // layout: a value the owner set outranks a new default, and a stored value that cannot be proven
+        // to be a default is adopted as a choice rather than guessed away.
+        val storedDesktop = if (current.contains("desktop")) current.getBoolean("desktop", false) else null
+        val plan = WebSessionPolicy.planLayout(
+            storedRule = current.getInt("layout-rule", 0),
+            storedDesktop = storedDesktop,
+            storedChoice = current.getBoolean("desktop-choice", false),
+        )
+        if (plan != null) {
+            val editor = current.edit().putInt("layout-rule", plan.rule)
+            if (plan.desktop != null) editor.putBoolean("desktop", plan.desktop)
+            if (plan.choice) editor.putBoolean("desktop-choice", true)
             editor.apply()
         }
         return current
@@ -171,6 +204,28 @@ abstract class MessengerWebActivity : ComponentActivity() {
         } catch (failure: Throwable) {
             blocked("The web session hit an unexpected error", "This browser was closed before any login was attempted.", failure)
         }
+    }
+
+    /**
+     * The conversation this slot was last in, read before the browser is created.
+     *
+     * Only a real conversation is ever restored: it is validated both as a thread address and against the
+     * slot's own app, so a value written by another app — or a page that merely looked like one — can never
+     * decide where this slot goes. Anything else falls back to the app's own entry point.
+     */
+    private fun startAddress(): String {
+        val remembered = rememberedThread ?: return app.home
+        return if (WebSessionPolicy.allowedFor(app, remembered)) remembered else app.home
+    }
+
+    /** Remembers a conversation for the next launch of this slot. Inbox, login and redirect pages are not
+     *  conversations and never overwrite the one that was remembered. */
+    private fun rememberThread(url: String) {
+        if (!MessengerThread.isThread(url) || !WebSessionPolicy.allowedFor(app, url)) return
+        if (rememberedThread != null && MessengerThread.sameThread(rememberedThread.orEmpty(), url)) return
+        rememberedThread = url
+        try { preferences().edit().putString(MessengerWeb.THREAD_KEY, url).apply() } catch (_: Exception) { /* a slot that cannot
+            remember its place still works; the next launch just starts at the app's entry point */ }
     }
 
     private fun configure() {
@@ -203,23 +258,40 @@ abstract class MessengerWebActivity : ComponentActivity() {
             return
         }
         account = expected
-        // The hub passes the slot's app; its own preferences keep it after a clear or a restart.
+        finishAfterClear = intent?.getBooleanExtra(MessengerWeb.EXTRA_CLEAR, false) == true
+        // The hub passes the slot's app; its own preferences keep it after a clear or a restart. A
+        // deletion launch does not write anything back: its preferences were just removed on purpose.
         app = HubApps.byId(intent?.getStringExtra(MessengerWeb.EXTRA_APP))
             ?: HubApps.byId(getSpacePreferences().getString("app", null))
             ?: HubApps.DEFAULT
-        getSpacePreferences().edit().putString("app", app.id).apply()
+        if (!finishAfterClear) getSpacePreferences().edit().putString("app", app.id).apply()
         desktop = getSpacePreferences().getBoolean("desktop", WebSessionPolicy.defaultDesktop(app))
+        // The conversation this slot was last in, read before the browser exists so the very first address it
+        // loads is that chat rather than the inbox behind it.
+        rememberedThread = getSpacePreferences().getString(MessengerWeb.THREAD_KEY, null)?.takeIf { MessengerThread.isThread(it) }
         enableEdgeToEdge()
         createLayout()
         browserConfigured = true
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                popupDialog?.takeIf { it.isShowing }?.let { dialog ->
+                    val child = popup
+                    if (child?.canGoBack() == true) child.goBack() else dialog.dismiss()
+                    return
+                }
                 val web = browser
                 if (!clearing && web != null && web.canGoBack()) web.goBack() else finish()
             }
         })
-        if (getSpacePreferences().getBoolean("web-consent", false)) createBrowser()
-        else showConsent()
+        // A deletion launch is the one case that does not need the consent card: the slot is already
+        // being removed, and clearing must work even though the hub erased its preferences first.
+        if (finishAfterClear) {
+            createBrowser()
+            finishAfterClear = false
+            if (browser == null) finish() else clearSession(reopen = false)
+        } else if (getSpacePreferences().getBoolean("web-consent", false)) {
+            createBrowser()
+        } else showConsent()
     }
 
     /** Anything that stops this browser from working ends here: stored, shown, and copyable. */
@@ -445,10 +517,39 @@ abstract class MessengerWebActivity : ComponentActivity() {
             setSupportZoom(true)
             builtInZoomControls = true
             displayZoomControls = false
-            if (desktop) userAgentString = WebSessionPolicy.desktopAgent(userAgentString)
+            // AI sign-in providers reject embedded WebViews. Do not disguise the Android WebView as
+            // desktop Chrome for those sites; the supported fallback opens the official site outside Bop.
+            if (desktop && app.kind != HubApps.KIND_AI) userAgentString = WebSessionPolicy.desktopAgent(userAgentString)
         }
         SpaceSessions.cookies(web, account).apply { setAcceptCookie(true); setAcceptThirdPartyCookies(web, false) }
         web.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean,
+                                       resultMsg: android.os.Message): Boolean {
+                // Do not let a page open popups in the background. A real tap can open a bounded
+                // in-app window, attached to this slot's WebView profile, so auth cookies and the
+                // window.opener flow stay inside the correct account.
+                if (view !== browser || clearing) return false
+                if (!isUserGesture) return false
+                if (popup != null) {
+                    // One at a time. Say why the tap did nothing instead of dropping it silently, because
+                    // the tap the user just made is the one an auth dialog asked for.
+                    status.visibility = View.VISIBLE
+                    status.text = "Close the sign-in window that is already open, then tap again."
+                    return false
+                }
+                return try {
+                    showPopup(resultMsg)
+                    true
+                } catch (failure: Throwable) {
+                    status.visibility = View.VISIBLE
+                    status.text = "This page's sign-in window could not open. Use Options → Open outside Bop."
+                    WebSessionRuntime.failure(this@MessengerWebActivity, account, "opening a site popup", failure)
+                    false
+                }
+            }
+            override fun onCloseWindow(window: WebView) {
+                if (window === popup) popupDialog?.dismiss()
+            }
             override fun onReceivedTitle(view: WebView, title: String?) {
                 if (view === browser && titleReady && !pageFailed && !tlsBlocked &&
                     WebSessionPolicy.allowedFor(app, view.url.orEmpty())) reportTitle(title)
@@ -477,8 +578,12 @@ abstract class MessengerWebActivity : ComponentActivity() {
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (WebSessionPolicy.allowedFor(app, request.url.toString())) return false
+                if (WebSessionPolicy.isSafeExternalHttps(request.url.toString())) {
+                    openOutside(request.url.toString())
+                    return true
+                }
                 status.visibility = View.VISIBLE
-                status.text = getString(R.string.web_status_blocked_navigation, app.label)
+                status.text = "This destination cannot open inside Bop. Use Options → Open outside Bop for a web link."
                 return true
             }
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -490,6 +595,7 @@ abstract class MessengerWebActivity : ComponentActivity() {
             }
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 pageFailed = false
+                status.setOnClickListener(null)
                 // A new page starts its own baseline, so unread it already had is not "just arrived".
                 unread.forget()
                 titleReady = false
@@ -505,8 +611,15 @@ abstract class MessengerWebActivity : ComponentActivity() {
                 }
             }
             override fun onPageFinished(view: WebView, url: String) {
+                rememberThread(url)
                 if (!pageFailed && !tlsBlocked && WebSessionPolicy.allowedFor(app, url)) {
                     titleReady = true;
+                    if (WebSessionPolicy.isEmbeddedSigninRefusal(app, url, view.title)) {
+                        status.visibility = View.VISIBLE
+                        status.text = "This provider blocks embedded sign-in. Tap here to open ${app.label} in your browser."
+                        status.setOnClickListener { confirmOpenAiInBrowser() }
+                        return
+                    }
                     status.text = getString(R.string.web_status_ready, app.label, account.name)
                     status.visibility = View.GONE
                     watchTitle(view)
@@ -521,7 +634,13 @@ abstract class MessengerWebActivity : ComponentActivity() {
             override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
                 if (request.isForMainFrame) {
                     pageFailed = true
-                    status.text = getString(R.string.web_status_http_error, response.statusCode)
+                    if (WebSessionPolicy.isGoogleMalformedAuthResponse(app, request.url.toString(), response.statusCode)) {
+                        status.visibility = View.VISIBLE
+                        status.text = "Google rejected this sign-in request (400). Tap here to restart ${app.label} in your system browser."
+                        status.setOnClickListener { openOutside(app.home) }
+                    } else {
+                        status.text = getString(R.string.web_status_http_error, response.statusCode)
+                    }
                 }
             }
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
@@ -531,6 +650,7 @@ abstract class MessengerWebActivity : ComponentActivity() {
                 status.text = getString(R.string.web_status_tls)
             }
             override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                popupDialog?.dismiss()
                 discardBrowser()
                 status.visibility = View.VISIBLE
                 status.text = getString(R.string.web_status_renderer_gone)
@@ -542,24 +662,133 @@ abstract class MessengerWebActivity : ComponentActivity() {
             status.text = getString(R.string.web_status_downloads_disabled)
         }
         body.addView(web, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        web.loadUrl(app.home)
+        web.loadUrl(startAddress())
         if (resumed) web.onResume() else web.onPause()
         if (resumed && account.legacy) web.resumeTimers()
+    }
+
+    /** Displays one popup at a time, with the same isolated profile and the same HTTPS host policy. */
+    private fun showPopup(resultMsg: android.os.Message) {
+        val child = WebView(this)
+        try {
+            SpaceSessions.attach(child, account)
+            child.settings.javaScriptEnabled = true
+            child.settings.domStorageEnabled = true
+            child.settings.allowFileAccess = false
+            child.settings.allowContentAccess = false
+            child.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            child.settings.setSupportMultipleWindows(false)
+            child.settings.javaScriptCanOpenWindowsAutomatically = false
+            child.settings.useWideViewPort = true
+            child.settings.loadWithOverviewMode = true
+            child.settings.textZoom = 100
+            if (desktop && app.kind != HubApps.KIND_AI) child.settings.userAgentString = WebSessionPolicy.desktopAgent(child.settings.userAgentString)
+            SpaceSessions.cookies(child, account).apply { setAcceptCookie(true); setAcceptThirdPartyCookies(child, false) }
+        } catch (failure: Throwable) {
+            child.destroy()
+            throw failure
+        }
+        val frame = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val heading = TextView(this).apply {
+            text = "${app.label} · Space ${account.name} · Sign-in window"
+            textSize = 14f
+            setPadding(dp(16), dp(12), dp(8), dp(12))
+        }
+        val close = TextView(this).apply {
+            text = "Close"
+            textSize = 14f
+            gravity = android.view.Gravity.CENTER
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+            setOnClickListener { popupDialog?.dismiss() }
+        }
+        frame.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(heading, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(close)
+        })
+        frame.addView(child, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        val dialog = Dialog(this).apply {
+            setContentView(frame)
+            setOnDismissListener { disposePopup(child) }
+        }
+        popup = child
+        popupDialog = dialog
+        child.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (WebSessionPolicy.allowedFor(app, request.url.toString())) return false
+                if (WebSessionPolicy.isSafeExternalHttps(request.url.toString())) openOutside(request.url.toString())
+                else {
+                    status.visibility = View.VISIBLE
+                    status.text = "The sign-in window tried to open an unsupported destination."
+                }
+                dialog.dismiss()
+                return true
+            }
+            override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: SslError) {
+                handler.cancel()
+                status.visibility = View.VISIBLE
+                status.text = getString(R.string.web_status_tls)
+                dialog.dismiss()
+            }
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                dialog.dismiss()
+                return true
+            }
+        }
+        @Suppress("DEPRECATION")
+        (resultMsg.obj as WebView.WebViewTransport).webView = child
+        resultMsg.sendToTarget()
+        dialog.show()
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.82f).toInt())
+    }
+
+    private fun disposePopup(child: WebView) {
+        if (popup === child) popup = null
+        if (popupDialog?.isShowing != true) popupDialog = null
+        try {
+            child.stopLoading()
+            (child.parent as? ViewGroup)?.removeView(child)
+            child.destroy()
+        } catch (_: Throwable) {
+            // Popup cleanup must not take down the owning account session.
+        }
+    }
+
+    private fun openOutside(url: String) {
+        if (!WebSessionPolicy.isSafeExternalHttps(url)) return
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            status.visibility = View.VISIBLE
+            status.text = "No browser can open this link."
+        }
     }
 
     private fun showOptions() {
         if (clearing) return
         try {
             AlertDialog.Builder(this).setTitle(getString(R.string.web_options_title, account.name))
-                .setItems(arrayOf(
+                .setItems((listOf(
                     getString(R.string.web_options_fit),
-                    getString(if (desktop) R.string.web_options_mobile else R.string.web_options_desktop),
+                    if (app.kind == HubApps.KIND_AI) "Sign-in limitation"
+                    else getString(if (desktop) R.string.web_options_mobile else R.string.web_options_desktop),
                     getString(R.string.web_options_clear, account.name),
                     getString(R.string.web_options_copy),
-                    getString(R.string.web_options_about))) { _, index ->
+                    getString(R.string.web_options_about)) + when {
+                    app.id == HubApps.MESSENGER_ID -> listOf("Open Messenger app", "Open outside Bop")
+                    app.kind == HubApps.KIND_AI -> listOf("Open AI site in browser")
+                    else -> listOf("Open outside Bop")
+                }).toTypedArray()) { _, index ->
                     when (index) {
                         0 -> fitToScreen()
-                        1 -> {
+                        1 -> if (app.kind == HubApps.KIND_AI) {
+                            AlertDialog.Builder(this)
+                                .setTitle("Embedded sign-in is restricted")
+                                .setMessage("Google and some other providers do not allow sign-in inside embedded browsers. Open the official site in your browser; its account session cannot be transferred into this Bop space.")
+                                .setPositiveButton("Open AI site in browser") { _, _ -> openOutside(app.home) }
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .show()
+                        } else {
                             desktop = !desktop
                             getSpacePreferences().edit().putBoolean("desktop", desktop)
                                 .putBoolean("desktop-choice", true).apply()
@@ -574,12 +803,34 @@ abstract class MessengerWebActivity : ComponentActivity() {
                         4 -> AlertDialog.Builder(this).setTitle(getString(R.string.web_options_about_title))
                             .setMessage(getString(R.string.web_options_about_message, app.label, app.note))
                             .setPositiveButton(android.R.string.ok, null).show()
+                        5 -> when {
+                            app.id == HubApps.MESSENGER_ID -> openOfficialMessenger()
+                            app.kind == HubApps.KIND_AI -> confirmOpenAiInBrowser()
+                            else -> openOutside(browser?.url ?: app.home)
+                        }
+                        6 -> if (app.id == HubApps.MESSENGER_ID) openOutside(browser?.url ?: app.home)
                     }
                 }.show()
         } catch (failure: Throwable) {
             WebSessionRuntime.failure(this, account, "opening options", failure)
             status.text = getString(R.string.web_status_options_failed, failure.javaClass.simpleName)
         }
+    }
+
+    private fun openOfficialMessenger() {
+        val launch = try { packageManager.getLaunchIntentForPackage("com.facebook.orca") } catch (_: Throwable) { null }
+        if (launch != null) {
+            try { startActivity(launch) } catch (_: android.content.ActivityNotFoundException) { openOutside(browser?.url ?: app.home) }
+        } else openOutside(browser?.url ?: app.home)
+    }
+
+    private fun confirmOpenAiInBrowser() {
+        AlertDialog.Builder(this)
+            .setTitle("Open ${app.label} in your browser?")
+            .setMessage("Google and some other sign-in providers block embedded browsers. This opens the official ${app.label} home page in your browser. Start a fresh sign-in there; do not retry the old Google callback URL. The browser's session cannot be transferred into this Bop space.")
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton("Open browser") { _, _ -> openOutside(app.home) }
+            .show()
     }
 
     /**
@@ -625,12 +876,14 @@ abstract class MessengerWebActivity : ComponentActivity() {
             .setPositiveButton(getString(R.string.web_clear_confirm)) { _, _ -> clearSession() }.show()
     }
 
-    private fun clearSession() {
+    /** `reopen = false` is the deletion path: erase, then close instead of showing a fresh sign-in page. */
+    private fun clearSession(reopen: Boolean = true) {
         clearing = true
+        popupDialog?.dismiss()
         for (index in 0 until controls.childCount) controls.getChildAt(index).isEnabled = false
         status.text = getString(R.string.web_clearing, account.name)
         if (!account.legacy) {
-            clearProfileSession()
+            clearProfileSession(reopen)
             return
         }
         try {
@@ -658,6 +911,10 @@ abstract class MessengerWebActivity : ComponentActivity() {
                     // Flush is best effort.
                 }
                 clearing = false
+                if (!reopen) {
+                    if (!isFinishing && !isDestroyed) finish()
+                    return@removeAllCookies
+                }
                 if (!isFinishing && !isDestroyed) {
                     for (index in 0 until controls.childCount) controls.getChildAt(index).isEnabled = true
                     tlsBlocked = false
@@ -672,6 +929,7 @@ abstract class MessengerWebActivity : ComponentActivity() {
         } catch (failure: Throwable) {
             WebSessionRuntime.failure(this, account, "clearing cookies", failure)
             clearing = false
+            if (!reopen) { if (!isFinishing && !isDestroyed) finish(); return }
             blocked("Cookies could not be cleared", "Stop using this session until you can clear it from Setup, or clear the app's storage in Android settings.", failure)
         }
     }
@@ -690,11 +948,12 @@ abstract class MessengerWebActivity : ComponentActivity() {
             }.show()
     }
 
-    private fun clearProfileSession() {
+    private fun clearProfileSession(reopen: Boolean = true) {
         val web = browser
         if (web == null) {
             clearing = false
             for (i in 0 until controls.childCount) controls.getChildAt(i).isEnabled = true
+            if (!reopen && !isFinishing && !isDestroyed) finish()
             return
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) &&
@@ -705,6 +964,10 @@ abstract class MessengerWebActivity : ComponentActivity() {
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.DELETE_BROWSING_DATA)) {
                     WebStorageCompat.deleteBrowsingData(storage) {
                         clearing = false
+                        if (!reopen) {
+                            if (!isFinishing && !isDestroyed) finish()
+                            return@deleteBrowsingData
+                        }
                         if (!isFinishing && !isDestroyed) {
                             for (i in 0 until controls.childCount) controls.getChildAt(i).isEnabled = true
                             tlsBlocked = false; createBrowser()
@@ -714,11 +977,13 @@ abstract class MessengerWebActivity : ComponentActivity() {
                 } else error("Profile-specific deletion became unavailable")
             } catch (failure: RuntimeException) {
                 clearing = false
+                if (!reopen) { if (!isFinishing && !isDestroyed) finish(); return }
                 blocked("Space could not be cleared", "The browser engine refused profile-specific deletion. Other spaces were not touched.", failure)
             }
         } else {
             clearing = false
             for (i in 0 until controls.childCount) controls.getChildAt(i).isEnabled = true
+            if (!reopen) { if (!isFinishing && !isDestroyed) finish(); return }
             status.visibility = View.VISIBLE
             status.text = getString(R.string.web_clear_update_required)
         }
@@ -744,6 +1009,7 @@ abstract class MessengerWebActivity : ComponentActivity() {
         if (browserConfigured && !clearing && browser == null &&
             getSpacePreferences().getBoolean("web-consent", false)) createBrowser()
         try {
+            popup?.onResume()
             browser?.apply {
                 onResume(); if (account.legacy) resumeTimers()
                 // Back on screen: one reading from wherever the marker stands now, so a message that
@@ -758,6 +1024,7 @@ abstract class MessengerWebActivity : ComponentActivity() {
         // Native callbacks have no repeating Bop work to stop. WebView background delivery remains
         // best-effort and is not promised by keeping cookies/profile metadata.
         try {
+            popup?.onPause()
             browser?.apply {
                 recordWatch(WebUnread.detail(running = false))
                 // Pause rendering; do not globally pause every profile's website timers. No Bop timer
@@ -777,19 +1044,17 @@ abstract class MessengerWebActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         uploadCallback?.onReceiveValue(null); uploadCallback = null
+        popupDialog?.dismiss()
         discardBrowser()
         setIntent(intent)
         recreate()
     }
     override fun onDestroy() {
         uploadCallback?.onReceiveValue(null); uploadCallback = null
+        popupDialog?.dismiss()
         discardBrowser()
         super.onDestroy()
     }
-    private fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
 
-    private companion object {
-        /** Bumped when a layout default changes, so an old default is not mistaken for a user's choice. */
-        const val LAYOUT_RULE = 2
-    }
+    private fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
 }

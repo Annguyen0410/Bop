@@ -24,8 +24,18 @@ data class HubApp(
      * the desktop site or the user never reaches their chats at all. Measured against the live sites; see
      * [WebSessionPolicy.defaultDesktop]. Where the phone layout does have the messages page, it stays the
      * default, because that is the layout the service builds to fit an arbitrary screen width.
+     *
+     * Messenger and Instagram are in this group: the phone user agent takes Facebook's messages page to the
+     * legacy `m.facebook.com` route (measured 12 November 2026, see [WebSessionPolicy.defaultDesktop]) and
+     * Instagram's phone web layout has no direct inbox at all. Both used to work here on the desktop layout.
+     *
+     * AI sites do not use this to disguise their WebView as a desktop browser: identity providers can
+     * reject embedded sign-in regardless of layout, so the AI entries use the supported system-browser
+     * fallback instead.
      */
     val desktopSite: Boolean = false,
+    /** Which group of the picker this app belongs to. See [HubApps.KIND_SOCIAL] and [HubApps.KIND_AI]. */
+    val kind: String = HubApps.KIND_SOCIAL,
 ) {
     /** True only for apps whose phone notifications this build can observe. */
     val observed: Boolean get() = packages.isNotEmpty()
@@ -34,17 +44,20 @@ data class HubApp(
 object HubApps {
     const val DEFAULT_ID = "messenger"
     const val MESSENGER_ID = "messenger"
+    const val KIND_SOCIAL = "social"
+    const val KIND_AI = "ai"
 
     val MESSENGER = HubApp(
         "messenger", "Messenger", "https://www.facebook.com/messages/", listOf("facebook.com", "messenger.com"),
-        0xFF5375FF.toInt(), "Facebook's messages page, opened on the Facebook website. Cards need a Messenger installation bound to the slot.",
-        listOf(MESSENGER_PACKAGE),
+        0xFF5375FF.toInt(), "Facebook's messages page, opened on the Facebook website. Starts on the desktop site because the phone layout is redirected away from the messages page; your own switch in Options still wins. Cards need a Messenger installation bound to the slot.",
+        listOf(MESSENGER_PACKAGE), desktopSite = true,
     )
     val FACEBOOK = HubApp("facebook", "Facebook", "https://www.facebook.com/", listOf("facebook.com", "messenger.com"),
         0xFF1877F2.toInt(), "The Facebook website, including its messages page. Facebook's own notifications mix likes, comments and page posts with messages, so this app raises no cards from them; Messenger carries those, while a Facebook space that is open still badges its slot off its own tab title.")
     val INSTAGRAM = HubApp("instagram", "Instagram", "https://www.instagram.com/direct/inbox/",
         listOf("instagram.com", "facebook.com"), 0xFFE1306C.toInt(),
-        "Instagram direct messages. Cards need this app in exactly one slot.", listOf("com.instagram.android"))
+        "Instagram direct messages. Starts on the desktop site, which keeps the direct inbox reachable; Instagram's phone web layout is built to hand you off to the phone app and does not offer the inbox. Cards need this app in exactly one slot.",
+        listOf("com.instagram.android"), desktopSite = true)
     val WHATSAPP = HubApp("whatsapp", "WhatsApp", "https://web.whatsapp.com/",
         listOf("whatsapp.com", "whatsapp.net"), 0xFF25D366.toInt(),
         "WhatsApp Web needs you to link this phone by QR code, and this space asks for the desktop site because WhatsApp Web's phone layout serves its own landing page instead of the chat list. Cards need this app in exactly one slot.",
@@ -103,11 +116,35 @@ object HubApps {
         "WeChat for Web links the session by scanning a QR code with WeChat on your phone. Cards need this app in exactly one slot.",
         listOf("com.tencent.mm"))
 
+    // ---- AI accounts --------------------------------------------------------------------------
+    // One space = one signed-in account. Selecting the same entry in a second space gives it a second
+    // isolated WebView profile, so two accounts stay signed in side by side. These entries are web-only:
+    // they have no phone package, and their provider owns sign-in. The allow-list carries the identity
+    // providers each service actually redirects to. Google rejects OAuth in embedded WebViews, so Bop
+    // must not try to disguise these spaces as desktop Chrome.
+    val CHATGPT = HubApp("chatgpt", "ChatGPT", "https://chatgpt.com/",
+        listOf("chatgpt.com", "openai.com", "accounts.google.com", "appleid.apple.com", "idmsa.apple.com",
+            "login.microsoftonline.com", "login.live.com", "account.live.com"),
+        0xFF10A37F.toInt(),
+        "Sign in with email, Google, Microsoft or Apple. Some identity providers block embedded browsers. Open the official site in your system browser for sign-in; that session will not sync into this Bop space. No phone app is watched, so cards come only from this page's own title.",
+        kind = KIND_AI)
+    val CLAUDE = HubApp("claude", "Claude", "https://claude.ai/",
+        listOf("claude.ai", "anthropic.com", "accounts.google.com"), 0xFFD97757.toInt(),
+        "Sign in with email or Google. Google may block sign-in inside embedded browsers; an external browser's session remains outside Bop. No phone app is watched, so cards come only from this page's own title.",
+        kind = KIND_AI)
+    val GEMINI = HubApp("gemini", "Gemini", "https://gemini.google.com/",
+        listOf("gemini.google.com", "accounts.google.com", "myaccount.google.com"), 0xFF4285F4.toInt(),
+        "Gemini requires Google sign-in, which Google blocks inside embedded browsers. Open Gemini in your system browser; that session will not sign in this isolated Bop space. No phone app is watched, so cards come only from this page's own title.",
+        kind = KIND_AI)
+
     val ALL = listOf(MESSENGER, FACEBOOK, INSTAGRAM, WHATSAPP, TIKTOK, TELEGRAM, ZALO, X, THREADS, REDDIT,
-        DISCORD, SNAPCHAT, LINKEDIN, VIBER, SKYPE, GOOGLE_CHAT, VK, BLUESKY, WECHAT)
+        DISCORD, SNAPCHAT, LINKEDIN, VIBER, SKYPE, GOOGLE_CHAT, VK, BLUESKY, WECHAT, CHATGPT, CLAUDE, GEMINI)
     val DEFAULT = MESSENGER
 
     fun byId(id: String?): HubApp? = ALL.firstOrNull { it.id == id }
+
+    /** AI assistants, in the order the picker and the quick-add card show them. */
+    fun ai(): List<HubApp> = ALL.filter { it.kind == KIND_AI }
 
     /** Stored ids are validated on read, so a stale or hand-edited id falls back to Messenger. */
     fun orDefault(id: String?): HubApp = byId(id) ?: DEFAULT

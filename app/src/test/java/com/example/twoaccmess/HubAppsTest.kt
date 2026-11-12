@@ -14,7 +14,7 @@ class HubAppsTest {
         assertEquals("https://www.facebook.com/messages/", HubApps.MESSENGER.home)
         assertEquals("https://www.facebook.com/", HubApps.FACEBOOK.home)
         assertTrue(HubApps.MESSENGER.note.contains("Facebook's messages page"))
-        assertEquals(19, HubApps.ALL.size)
+        assertEquals(22, HubApps.ALL.size)
         assertEquals(HubApps.ALL.size, HubApps.ALL.map { it.id }.distinct().size)
         assertTrue(HubApps.ALL.all { it.id == it.id.lowercase() && it.id.none { c -> c == ' ' } })
         assertEquals(HubApps.ALL.size, HubApps.ALL.map { it.label }.distinct().size)
@@ -32,10 +32,11 @@ class HubAppsTest {
     }
 
     @Test fun onlyAppsWithARealListenerAreClaimedAsObserved() {
-        // Every catalog app except Facebook ships a phone app here, so it can raise cards. Facebook is
-        // web-only on purpose: its notifications mix likes, comments and page posts with messages.
-        assertEquals(listOf(HubApps.FACEBOOK), HubApps.webOnly())
-        assertEquals(HubApps.ALL.size - 1, HubApps.observingCount())
+        // Facebook is web-only on purpose because its notifications mix likes, comments and page posts
+        // with messages. The three AI assistants are web-only too: their providers ship no phone app
+        // whose notifications this build can attribute to a space.
+        assertEquals(listOf(HubApps.FACEBOOK, HubApps.CHATGPT, HubApps.CLAUDE, HubApps.GEMINI), HubApps.webOnly())
+        assertEquals(HubApps.ALL.size - 4, HubApps.observingCount())
         assertEquals(HubApps.observingCount(), HubApps.observingLabels().split(", ").size)
         assertTrue(HubApps.observingLabels().contains("WhatsApp"))
         assertTrue(HubApps.observingLabels().contains("Discord"))
@@ -53,7 +54,8 @@ class HubAppsTest {
         val meta = setOf("messenger", "facebook", "instagram")
         val others = listOf(HubApps.TIKTOK, HubApps.TELEGRAM, HubApps.WHATSAPP, HubApps.ZALO, HubApps.X, HubApps.THREADS,
             HubApps.REDDIT, HubApps.DISCORD, HubApps.SNAPCHAT, HubApps.LINKEDIN, HubApps.VIBER, HubApps.SKYPE,
-            HubApps.GOOGLE_CHAT, HubApps.VK, HubApps.BLUESKY, HubApps.WECHAT)
+            HubApps.GOOGLE_CHAT, HubApps.VK, HubApps.BLUESKY, HubApps.WECHAT,
+            HubApps.CHATGPT, HubApps.CLAUDE, HubApps.GEMINI)
         HubApps.ALL.filterNot { it.id in meta }.forEach { app ->
             others.filter { it.id != app.id }.forEach { other ->
                 assertFalse("${app.id} must not open ${other.id}", WebSessionPolicy.allowedFor(app, other.home))
@@ -98,17 +100,42 @@ class HubAppsTest {
         assertTrue(HubApps.ALL.filterNot { it.observed }.all { it.packages.isEmpty() })
     }
 
-    @Test fun catalogMarksTheAppsWhosePhoneLayoutHasNoMessagesView() {
+    @Test fun catalogMarksTheAppsThatStartOnTheDesktopSite() {
         // The flag lives on the catalog entry, and the entry's own note has to say so, because the About
-        // dialog is where the user learns why this one space does not look like the others. The rule and
-        // its measurements are pinned in [WebSessionPolicyTest]; a new app needs evidence before it is
-        // added here, not a guess.
-        assertEquals(setOf("tiktok", "zalo", "whatsapp"),
+        // dialog is where the user learns why this one space does not look like the others. Messenger,
+        // Instagram, TikTok, Zalo and WhatsApp need it because their phone layout has no reachable
+        // messages view; AI providers reject embedded browsers and therefore use the separate
+        // system-browser fallback.
+        // The rule and its measurements are pinned in [WebSessionPolicyTest]; a new app needs a reason
+        // before it is added here, not a guess.
+        assertEquals(setOf("messenger", "instagram", "tiktok", "zalo", "whatsapp"),
             HubApps.ALL.filter { it.desktopSite }.map { it.id }.toSet())
         HubApps.ALL.filter { it.desktopSite }.forEach { app ->
             assertTrue(app.id, app.note.contains("desktop site"))
         }
         assertTrue(HubApps.ALL.filterNot { it.desktopSite }.all { !it.note.contains("desktop site") })
+    }
+
+    @Test fun aiAccountsKeepTheirSignInProvidersAndRejectLookalikes() {
+        assertEquals(listOf("chatgpt", "claude", "gemini"), HubApps.ai().map { it.id })
+        HubApps.ai().forEach { app ->
+            assertEquals(HubApps.KIND_AI, app.kind)
+            assertFalse(app.observed)
+            assertFalse(app.desktopSite)
+        }
+        listOf(
+            HubApps.CHATGPT to listOf("https://chatgpt.com/", "https://auth.openai.com/", "https://accounts.google.com/o/oauth2/v2/auth",
+                "https://appleid.apple.com/auth/authorize", "https://idmsa.apple.com/appleauth/auth/signin",
+                "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", "https://account.live.com/"),
+            HubApps.CLAUDE to listOf("https://claude.ai/", "https://accounts.google.com/signin"),
+            HubApps.GEMINI to listOf("https://gemini.google.com/app", "https://accounts.google.com/signin", "https://myaccount.google.com/"),
+        ).forEach { (app, urls) ->
+            urls.forEach { assertTrue("${app.id} must allow $it", WebSessionPolicy.allowedFor(app, it)) }
+        }
+        listOf("https://chatgpt.com.evil.example/", "https://claude.ai@evil.example/",
+            "https://gemini.google.com.evil.example/", "http://chatgpt.com/", "https://claude.ai:8443/").forEach { url ->
+            HubApps.ai().forEach { app -> assertFalse("${app.id} must reject $url", WebSessionPolicy.allowedFor(app, url)) }
+        }
     }
 
     @Test fun storedAppIdsFallBackInsteadOfHidingASlot() {
