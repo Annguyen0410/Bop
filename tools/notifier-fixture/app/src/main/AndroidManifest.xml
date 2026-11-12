@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:allowBackup="false"
+        android:label="Bop notifier fixture"
+        android:supportsRtl="true">
+        <activity
+            android:name=".Main"
+            android:exported="true"
+            android:label="Bop notifier fixture">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Driven from adb so a scripted run needs no taps; see tools/notifier-fixture/README.md. -->
+        <receiver
+            android:name=".Post"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.whatsapp.FIXTURE_POST" />
+                <action android:name="com.whatsapp.FIXTURE_CLEAR" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
