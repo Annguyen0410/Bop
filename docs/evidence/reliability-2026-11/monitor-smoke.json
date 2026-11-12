@@ -1,0 +1,92 @@
+{
+  "kind": "local SSE integration fixture (not live-service messaging)",
+  "ok": true,
+  "steps": [
+    {
+      "name": "three-isolated-same-origin-sessions; B/C detect while A selected; source notifications denied",
+      "passed": true
+    },
+    {
+      "name": "minimized and closed-to-tray continue receiving fixture stream events",
+      "passed": true
+    },
+    {
+      "name": "unchanged state is quiet; title plus website signal requests one OS notice; consecutive accounts request separate notices",
+      "passed": true,
+      "limitation": "OS audible playback is not asserted; title changes expose no original message IDs"
+    },
+    {
+      "name": "a login route raises exactly one card for its own account and a working load clears it",
+      "passed": true,
+      "limitation": "not an actual provider token expiration"
+    },
+    {
+      "name": "renderer crash retries with real backoff, preserves profile and reconciles exposed unread delta",
+      "passed": true
+    },
+    {
+      "name": "fixture site reconnects its own EventSource and exposes missed unread after network restore",
+      "passed": true,
+      "limitation": "no provider sync API/cursor; same-count or read messages are not recoverable"
+    },
+    {
+      "name": "Bop sound mute leaves detection operational and requests silent OS notification",
+      "passed": true
+    },
+    {
+      "name": "note bodies live in their own store and a message event writes only the small settings file",
+      "passed": true,
+      "limitation": "byte counts, not a wall-clock profile of the user's own note collection"
+    },
+    {
+      "name": "real encrypted settings and note stores restore ids/unread metadata and note bodies",
+      "passed": true,
+      "limitation": "settings roundtrip, not a full process-restart/live login test"
+    },
+    {
+      "name": "stop-monitoring via actual IPC closes all views/listeners/streams and cancels retries",
+      "passed": true
+    }
+  ],
+  "notesPersistence": {
+    "settingsBytes": 1336,
+    "notesBytes": 2134490,
+    "settingsWrittenByOneEvent": 1336,
+    "noteBytesWrittenByOneEvent": 0
+  },
+  "idle": {
+    "processes": 9,
+    "workingSetMiB": 812.11,
+    "cpuPercent": 0.008,
+    "views": 3,
+    "monitors": 3,
+    "retries": 0,
+    "requests": 15,
+    "requestsDuringWindow": 0
+  },
+  "active": {
+    "processes": 9,
+    "workingSetMiB": 817.97,
+    "cpuPercent": 0.259,
+    "views": 3,
+    "monitors": 3,
+    "retries": 0,
+    "requests": 15
+  },
+  "stopped": {
+    "processes": 6,
+    "workingSetMiB": 543.29,
+    "cpuPercent": 0.053,
+    "views": 0,
+    "monitors": 0,
+    "retries": 0,
+    "requests": 15
+  },
+  "notificationAttempts": 19,
+  "osNotificationDiagnostics": {
+    "shown": 19,
+    "failed": 0,
+    "lastSilent": false
+  },
+  "audibleSoundVerified": false
+}

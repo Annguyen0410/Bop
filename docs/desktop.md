@@ -1,5 +1,138 @@
 # Bop Desktop
 
+## 0.2.8 — monitoring that admits when it stops, and a store that stays small (October 23, 2026)
+
+Two reports drove this round: *the desktop gets laggy when Bop is left running*, and *messages arrive on
+two accounts but only some of them are announced*. The full evidence and every measurement are in
+[major-update-audit.md](major-update-audit.md); this is the user-facing summary.
+
+**The lag was work, not a timer.** Every save sealed the entire state — settings *and* every note image —
+with OS encryption and wrote it to disk synchronously on the thread that also lays out windows. A save
+happened whenever monitoring changed anything, so an active chat paid for the whole note collection about
+once a second. Note bodies now live in their own encrypted store and are written only when a note actually
+changes; an ordinary event writes a ~1 KB settings file instead of megabytes. Measured on this machine
+with 8 notes of 500 KB: **27.04 ms → 0.36 ms** per save, **5,334,711 → 285 bytes** written. Both stores are
+written through a temporary file and renamed, so an interrupted write can no longer destroy the previous
+good copy, and a settings file from an earlier build is migrated on first save. The dashboard is also told
+only *that* a note has a picture, instead of being sent the picture on every update.
+
+**A quiet account is now a loud problem.** Two states used to stop monitoring without telling anyone: a
+page that lands on a sign-in screen (the account is signed out) and the end of the bounded retry ladder
+(the page keeps failing). Both now raise one card for that space — *"Work needs you to sign in again"*,
+*"Home stopped being monitored"* — with a native notification, and both clear themselves silently once a
+page loads normally again. The space card also reads the state in words ("Sign-in required · press Open",
+"Monitoring stopped · press Open to resume") instead of a raw status identifier. Other accounts are
+unaffected in every case; that is asserted in the integration run.
+
+**Also fixed:** a notification raised inside an allowed sign-in popup was attributed to no space and
+dropped; a relative `--bop-out` aborted a verification run before it began.
+
+Verified on the source tree:
+
+| Check | Result |
+| --- | --- |
+| Desktop tests | 136 passed, 0 failed (8 new in [monitor-health.test.js](test/monitor-health.test.js)) |
+| Desktop integration, real Electron | `ok: true`, 10/10 steps: 3 isolated accounts, minimize/tray, sign-in card raised once and cleared, renderer crash with real 30 s backoff, offline/online, mute, note stores split, stop releases everything. 19 OS notification requests, 0 failed — [monitor-smoke.json](evidence/major-update/monitor-smoke.json) |
+| Persistence cost | [perf-notes.js](tools/perf-notes.js) → [perf-notes.json](evidence/major-update/perf-notes.json) |
+| Retry ladder, end to end | **ok: true**: six real failed navigations through the production 30/60/120/240/480 s backoff; `monitoring-stopped` at **930.9 s** with one card ("Account A stopped being monitored") and one OS notification; a working load clears the card silently — [retry-smoke.json](evidence/major-update/retry-smoke.json) |
+| Android JVM tests | 142 passed, 0 failed (6 new in [HubReducerTest](../app/src/test/java/com/example/twoaccmess/HubReducerTest.kt)) |
+| Android debug build | `:app:assembleDebug` BUILD SUCCESSFUL |
+| Android on an emulator (API 37) | 10/10 checks: a fixture `MessagingStyle` notification from a bound WhatsApp slot became one card, a dismissal survived a listener revoke/re-grant, forced deep idle still ingested a message, `am kill` and a reboot restored 3 spaces, and a revoked-then-granted `POST_NOTIFICATIONS` brings the pending alert back — [android-device.json](evidence/major-update/android-device.json) |
+| Real messaging account, real phone, OS-level notification denial | **not tested** — no credentials and no physical device; the emulator run above uses a fixture notification source |
+
+Re-running the profiling procedure: `cd desktop && npx electron tools/perf-notes.js`. Re-running the
+integration matrix: `cd desktop && npx electron . --bop-monitor-smoke --bop-out "$(pwd)/dist-smoke"` (the
+path must be absolute on Windows).
+
+That command needs no extra switch: since the November 2026 round a verification run adds
+`--no-proxy-server` itself. Before that, on a machine whose network settings make Chromium resolve a proxy,
+the fixture's loopback loads stalled and the run failed at `load A timeout` while the dashboard loaded
+normally — [reliability-2026-11.md](reliability-2026-11.md) (finding D1).
+
+## 0.2.6 — a task panel can finish its sign-in, and a duplicate space can be deleted (October 18, 2026)
+
+Reported: after adding a custom task/earning site and signing in, the pane blocked the page and said the
+site was not allowed; and there was no way to delete an extra task site or space on desktop or Android.
+
+**Why the sign-in was blocked.** A `custom` space allowed exactly the host that was typed. Real panels
+finish a login on another host — Google or Microsoft identity pages, an `auth.`/`app.` subdomain, or the
+panel's own `accounts.` host — and the old rule called that a navigation outside the allow-list. It
+prevented the page, handed the URL to the system browser, and the space therefore never received the
+cookie that proves the login. Two shapes of the same hole were also uncovered: a server `302` after the
+login `POST` is delivered as `will-redirect`, not `will-navigate`, and a Google/Microsoft sign-in opened
+with `window.open` is a popup, which the old handler gave to the system browser as well.
+
+**The fix is an explicit, per-space grant.** A blocked main-frame navigation or popup now raises a card in
+the hub — *Allow `accounts.google.com`?* — naming the site, the space and the page that asked. The answer
+is stored with that space (`extraHosts`, bounded and validated on read), the held navigation resumes in
+the same isolated Chromium session, and an allowed popup is re-opened by the page so it keeps its
+`window.opener` and can hand the result back. Grants are listed in the space's **Edit** dialog and can be
+revoked one at a time; nothing is allowed globally, and the catalog's own hosts are never removable. A
+background restore or watcher read still refuses an outside redirect quietly instead of throwing a modal
+over the user's work. The page also gains the ordinary permissions a study needs — notifications, camera
+and microphone, fullscreen, sanitized clipboard write, clipboard read and top-level storage access — but
+only on origins that space is allowed to hold.
+
+**Deleting a duplicate.** Every extra space card now has **Delete**; the Edit dialog says **Hide space**
+for the reversible choice and **Delete space** for the irreversible one. Deleting removes the slot, its
+alerts and its settings, and erases that space's entire Chromium partition (`clearStorageData` +
+`clearCache`), so a custom panel added twice does not leave a second signed-in profile behind. Android
+gained the same visible **Delete space** button on each card; its dialog offers **Delete + clear login**,
+which opens the slot only long enough to erase its cookies, profile storage and preferences in that
+slot's own process, then closes.
+
+Verified on the source tree:
+
+| Check | Result |
+| --- | --- |
+| Desktop unit tests | 121 passed, 0 failed (4 new: per-space grants/revoke and delete in [spaces.test.js](test/spaces.test.js), plus the deletion card and permission prompt in [dashboard-ui.test.js](test/dashboard-ui.test.js)) |
+| Desktop smoke, real Electron | `ok: true`, including `signin-prompt` (the card names the host), `signin-granted` (the held redirect resumes and the grant is stored) and `delete-space` (the slot, pane and session are gone) — [source-smoke-026.json](evidence/desktop-portable/source-smoke-026.json) |
+| Android JVM tests | 131 passed, 0 failed / 0 errors / 0 skipped, `:app:testDebugUnitTest` |
+| Kotlin compilation | `:app:compileDebugKotlin` passed |
+| Live signed-in task panel | **Not run here.** The smoke used a loopback redirect to exercise the real navigation/popup permission path; no Google/Microsoft account was signed in, and no packaged artifact was rebuilt in this round. |
+
+## Browser-cache budget
+
+Desktop settings now expose a 512 MiB default aggregate Chromium HTTP-cache budget, with 256 MiB and
+1 GiB alternatives. Bop measures each space's disposable HTTP cache after page loads, on startup, when
+the setting changes, and every 15 minutes. When the aggregate is over budget it clears least-recently-used
+HTTP caches first and measures again. Cookie jars, local storage, IndexedDB, saved sessions, and task data
+are not cleanup candidates. If Chromium refuses a clear or usage remains over budget, Settings reports
+that state instead of claiming success.
+
+Chromium does not expose a per-write cache quota, so active pages can temporarily exceed the selected
+budget before a measurement and eviction. The portable launcher uses a fixed unpack directory and the
+janitor removes abandoned older copies; this controls Bop's temporary launcher files separately from
+browser-profile data. Android's WebView cache storage has no supported aggregate per-profile size API, so
+the Android build keeps its existing bounded notes, avatar and crash-report data and trims decoded image
+bitmaps on memory pressure, but cannot promise a hard disk cap on provider-managed web caches.
+
+## Portable 0.2.4 — why %TEMP% filled up, and what now stops it (October 18, 2026)
+
+The reported symptom was disk: a portable launch left between 0.3 and 1.2 GB behind in `%TEMP%`, and
+because Bop starts at sign-in it did that several times a day — about 29 GB in two days on one machine.
+
+| Root cause | Fix |
+| --- | --- |
+| The wrapper unpacked into a **fresh UUID folder per build** (`electron-builder`'s default `unpackDirName`), so every version added a new copy that only a clean exit removed — a reboot, a sign-out or a killed process kept it forever | `"portable": { "unpackDirName": "bop-portable" }`: one fixed folder, wiped and refilled on each launch, so `%TEMP%` holds at most one copy |
+| The sweep that removes abandoned copies (from other versions, or other names) ran **only at launch** — a copy abandoned hours later waited for the next sign-in, which on a laptop that never signs out is never | [startPortableJanitor](src/main/main.js) sweeps at launch **and every 4 hours**; the timer is `unref()`d so it can never keep the process alive |
+
+Verified on the delivered `Bop-0.2.4-portable.exe`, not on the source tree:
+
+| Check | Result |
+| --- | --- |
+| `npm test` | 115 passed, 0 failed (4 new: [threads.test.js](test/threads.test.js)) |
+| Packaged smoke from the EXE | `ok: true`, `packaged: true`, `missingFiles: []`, exit 0 |
+| Unpack location | one `%TEMP%\bop-portable`, no UUID folder |
+| Janitor, real run | a back-dated fake `%TEMP%\bop-old-021` was deleted on the next launch while the running copy stayed |
+| Start with Windows | `com.bop.desktop` → `"…\Desktop\Bop-0.2.4-portable.exe" --bop-autostart` |
+
+A notification can now open the conversation, not just the inbox: each space remembers the last chat page it
+was on ([threads.js](src/main/threads.js)) and the alert goes straight there — as the view's *first* address,
+where the earlier form loaded the inbox and then navigated, which cost a second page load per click. What this
+cannot do is tell which thread a *new* message arrived in: Messenger's notification does not say, and Bop does
+not read message contents, so the fallback is the last conversation that space had open.
+
 ## Current source: 0.1.9 — release check, English only, one build left (October 10, 2026)
 
 Asked for: whether the app is ready to release and, if anything needs fixing for that, to fix it; to turn
@@ -446,8 +579,8 @@ OS notification settings, network loss, sleep and the website's own rules can st
 
 Android's embedded WebView sessions do **not** implement Messenger Web Push in this build. The Android
 listener reads alerts from installed apps, not the two web accounts. Linking one installed Messenger
-cannot make it observe the other web account. Android code and APKs were not changed in this release;
-the web-account notification request remains unresolved on Android.
+cannot make it observe the other web account. Android code and APKs were not changed for that
+web-push request; it remains unresolved on Android.
 
 The requested feature of dragging another application's actual chat bubble **inside** Bop, while that
 foreign bubble continues running, is **not implemented**. Android overlays/system bubbles remain owned
@@ -456,10 +589,21 @@ The existing Bop bubble switches Bop spaces; it must not be advertised as an ext
 
 ## Other desktop features
 
-- 19 social catalog entries, 13 task-panel entries, and custom HTTPS sites.
+- 19 social catalog entries, 3 AI-account entries (ChatGPT, Claude, Gemini), 13 task-panel entries, and
+  custom HTTPS sites. One AI space holds one login; the same assistant added to two spaces gets two
+  isolated cookie jars and can be switched by opening either space.
+- AI spaces keep the embedded engine's normal browser identity. Google explicitly blocks OAuth in
+  embedded browsers, regardless of a desktop layout or user-agent change. Edit an AI space and use
+  **Open AI site in browser** to restart at the provider's official home page in the system browser.
+  Its cookies are not copied back to Bop, so this fallback is for using the site in that browser; it
+  cannot complete sign-in for the isolated embedded space.
 - Separate cookies, storage and cache per space. Same application/OS account, not an OS security boundary.
-- Main-frame host allowlist; outside HTTPS links are handed to the system browser.
-- Mobile user agent by default, with per-space desktop opt-out. Neither agent names Electron or Bop, and
+- Main-frame host allowlist, plus per-space sign-in grants: an off-site login page raises an Allow card
+  instead of being silently handed to the system browser, and the grant is revocable in Edit. Links that
+  are not a sign-in remain outside the space. Deleting an extra space also erases its Chromium partition;
+  Android's Delete offers the same login cleanup in the slot's own process.
+- Phone user agent for task panels and desktop user agent for social spaces, with a per-space switch.
+  AI spaces retain the embedded engine's normal identity. For the other categories, the layout agents omit Electron or Bop, and
   the rule exists because a site that is told Electron may refuse to serve anything at all (measured:
   `app.usercrowd.com` answered `unsupported_browser` for the Electron default and its sign-in page for the
   same engine asked as Chrome). This is a layout preference, **not** a guarantee that every site's modal

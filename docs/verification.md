@@ -1,5 +1,45 @@
 # Bop — verification and delivery
 
+## Android + Windows, reliability round (12 November 2026)
+
+Asked for: make Messenger and Instagram work in the embedded WebView again, check the layout migration and
+session isolation, fix real defects on both platforms, and prove it.
+
+**Result:** the regression is found and fixed, the migration can no longer lose a switch, and both test
+suites pass. What is *not* proven is anything that needs a phone: this machine has no device and no AVD
+(`adb devices` empty, `emulator -list-avds` empty) and there is no authorized Meta test account, so no sign-in
+and no message was sent. Full report with the measurements: [reliability-2026-11.md](reliability-2026-11.md).
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Android JVM unit tests | **146 passed**, 0 failed / errors / skipped | `./gradlew :app:testDebugUnitTest` |
+| Android debug APK | built, 11 748 101 bytes | `./gradlew :app:assembleDebug` |
+| Android lint | **0 errors**, 51 pre-existing warnings | `./gradlew :app:lintDebug` |
+| Android device / emulator | **not run** — no device attached, no AVD defined | `adb devices`, `emulator -list-avds` |
+| Desktop unit tests | **136 passed**, 0 failed | `cd desktop && npm test` |
+| Desktop integration harness, real Electron | **21/21 checks, exit 0** | [monitor-smoke.json](evidence/reliability-2026-11/monitor-smoke.json) |
+
+- **Messenger/Instagram were broken by the mobile-first layout default, and the redirect proves it.** With a
+  phone user agent, `https://www.facebook.com/messages/` answers `302 → https://m.facebook.com/messages/`,
+  and that route answers `login.php?next=…&refsrc=deprecated`; with a desktop agent the same URL is not
+  redirected. The phone layout does not render the messages page, it leaves it. Both apps now start on the
+  desktop layout (`desktopSite = true`), the per-space switch in Options still wins, and their catalog notes
+  say why.
+- **The layout migration could have thrown away a real choice, and no longer can.** The old code deleted a
+  stored `desktop` value when the choice marker was missing. The switch has written that marker since the
+  first commit, so an unmarked value can only come from a build that predates it — where a default is
+  indistinguishable from a decision. `WebSessionPolicy.planLayout()` now adopts any stored value as a choice
+  and has no way to express a deletion; a space that never stored one is the only one the rule moves.
+- **The oldest switch also lost its value, not just its meaning.** The legacy `getPreferences` migration set
+  the choice marker but never copied the boolean, so that space fell through to the app's default.
+- **A verification run could not load its own fixture.** `npx electron . --bop-monitor-smoke` failed at
+  `load A timeout` on this Windows host twice — the dashboard (`file://`) loaded, every loopback `http://`
+  load stalled — and passed with `--no-proxy-server`. Verification runs now pass that switch themselves; a
+  user's real spaces keep the machine's proxy.
+- **Honest limits:** no device, no AVD, no authorized account. The Messenger post-sign-in inbox, message send,
+  session restore on a real phone, and Instagram in both layouts remain unverified here and are listed with a
+  manual procedure in the report.
+
 ## Desktop 0.1.9 — release check, English only, one build left (October 10, 2026)
 
 Asked for: whether the app is ready to release and, if anything needs fixing for that, to fix it; to turn
@@ -118,7 +158,7 @@ wiring it up are in [scanning.md](scanning.md).
 - 18 new JVM tests for the sweep, the unmuted baseline rules, adapter failure isolation and the page
   payload format; full suite **124 tests, 0 failures/errors/skips**, exit 0
   ([raw log](evidence/scanning/jvm-tests.txt)).
-- An in-page reader with **one descriptor for every catalog app** (19 ids), verified against a local
+- An in-page reader with **one descriptor for every catalog app** (22 ids), verified against a local
   fixture chat page through a real DOM: 13 Node tests, desktop suite 64/64, asset packaged
   (`:app:mergeDebugAssets`, exit 0). [Raw output](evidence/scanning/reader-tests.txt).
 - The shipped asset also ran in a **real Chromium engine** (`npm run smoke:unread`, 7/7 steps, exit 0,
