@@ -11,7 +11,8 @@ command or measurement that produced it, and every gap is listed as a gap.
 | New branch | `fix/cross-platform-functional-reliability-2026-11` |
 | Working tree at branch time | 75 entries already present (38 modified, 37 untracked) — prior in-progress work, **kept as-is** |
 | `main` | not touched: still `b690111`; no reset, no force-push, no history rewrite |
-| Commits on the branch | `b5eb45d` Android layout + migration, `59aa1b0` desktop verification harness, and the docs commit that carries this file |
+| Commits on the branch | `4456097` Android layout + migration, `ed49fea` desktop verification harness, `e4f0d5e` docs (this file) |
+| Push labels | `android-2026-11` → `4456097`, `desktop-2026-11` → `ed49fea`, pushed separately to `origin` (`https://github.com/Annguyen0410/Bop`); the branch carries the docs commit too |
 
 The branch was created with `git checkout -b`, so the uncommitted work that was already in the tree came
 along with it rather than being stashed or discarded. Nothing in this round deletes a user's stored
