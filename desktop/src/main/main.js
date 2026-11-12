@@ -14,7 +14,11 @@ const bubbleDrag = require('./bubble-drag.js');
 const avatar = require('./avatar.js');
 const popup = require('./popup.js');
 const notifyLog = require('./notify-log.js');
+const monitorHealth = require('./monitor-health.js');
 const autostart = require('./autostart.js');
+const portableJanitor = require('./portable-janitor.js');
+const storageBudget = require('./cache-budget.js');
+const threads = require('./threads.js');
 const { AccountMonitor } = require('./message-monitor.js');
 const notesSync = require('./notes-sync.js');
 const { randomUUID, randomBytes } = require('node:crypto');
@@ -24,9 +28,62 @@ const { randomUUID, randomBytes } = require('node:crypto');
 // same application when it was started from a portable copy earlier.
 app.setAppUserModelId('com.bop.desktop');
 
+// Chromium starts a pile of background services no part of Bop uses: the Cast media router, the media
+// session/global media controls, the translate and autofill-infrastructure clients. Each one is a thread
+// or a helper, and they run before any of Bop's own code does. These switches are appended here, before
+// `app.whenReady()`, because that is the only moment Chromium reads them.
+//
+// `CalculateNativeWinOcclusion` is deliberately in the list: it exists to tell Chromium when a window is
+// covered by another one, which costs a per-window timer and matters here because the bubble is a
+// frameless, transparent, always-on-top window that is usually overlapped. Bop already paints its own
+// panes, and `backgroundThrottling` on each view is the switch that governs whether a hidden page keeps
+// running — see [spaceView] — so nothing Bop relies on is switched off with it.
+const UNUSED_CHROMIUM_FEATURES = [
+  'MediaRouter',
+  'GlobalMediaControls',
+  'HardwareMediaKeyHandling',
+  'CalculateNativeWinOcclusion',
+  'Translate',
+  'AutofillServerCommunication',
+  'OptimizationGuideModelDownloading',
+  'InterestFeedContentSuggestions',
+  'ReadAnything',
+  'SpareRendererForSitePerProcess',
+];
+app.commandLine.appendSwitch('disable-features', UNUSED_CHROMIUM_FEATURES.join(','));
+
+/**
+ * How long the hub gets to itself after its own document has loaded, before any space is fetched.
+ *
+ * It applies to *every* background fetcher, not just the restore queue, because each one that ignores it
+ * breaks the same promise in its own way: a second fetcher with a one-second timer of its own fetched a
+ * watched space's page 237 ms after the hub mark, and the launch check caught that as "the hub got almost no
+ * head start over the pages" (its floor is 300 ms).
+ */
+const HUB_SETTLE_MS = 400;
+/** Gap between two remembered spaces, so several page loads never compete for the first second. */
+const RESTORE_STEP_MS = 350;
+/** How often a running portable copy looks for copies other launches abandoned in %TEMP% — see [startPortableJanitor]. */
+const JANITOR_SWEEP_MS = 4 * 60 * 60 * 1000;
+
+// The moment this file started running, which for a portable copy is *after* the launcher has unpacked the
+// app. The acceptance run reports its startup numbers against it — see [recordStartup].
+const APP_STARTED_AT = Date.now();
+
 const MONITOR_SMOKE = process.argv.includes('--bop-monitor-smoke');
-const SMOKE = process.argv.includes('--bop-smoke') || MONITOR_SMOKE;
+// Waits out the real 930-second retry ladder; see retry-smoke.js.
+const RETRY_SMOKE = process.argv.includes('--bop-retry-smoke');
+const SMOKE = process.argv.includes('--bop-smoke') || MONITOR_SMOKE || RETRY_SMOKE;
 const LIVE_CHECK = process.argv.includes('--bop-live-check');
+
+// Every verification run (`--bop-smoke`, `--bop-monitor-smoke`, `--bop-retry-smoke`, `--bop-live-check`)
+// drives the app against a fixture on 127.0.0.1. On a machine whose network settings ask Chromium to
+// discover a proxy, that proxy resolution sits in front of the fixture URL too: measured on this Windows
+// host, `npx electron . --bop-monitor-smoke` failed at "load A timeout" (the dashboard, a file:// document,
+// loaded normally; every loopback http load stalled), and it passed immediately with `--no-proxy-server`.
+// The flag is scoped to verification runs on purpose: a real user's spaces are remote https pages and must
+// keep using whatever proxy the machine is configured with.
+if (SMOKE || LIVE_CHECK) app.commandLine.appendSwitch('no-proxy-server');
 const SMOKE_ACTIVE = process.argv.includes('--bop-active'); // smoke with a visible window, used for capture
 const LIVE_OUT_ARG = process.argv.includes('--bop-out') ? process.argv[process.argv.indexOf('--bop-out') + 1] : null;
 const LIVE_USER_DATA_ARG = process.env.BOP_LIVE_USER_DATA || process.argv.find((argument) => argument.startsWith('--user-data-dir='))?.slice('--user-data-dir='.length) || null;
@@ -34,7 +91,9 @@ const LIVE_SETTINGS_ARG = process.env.BOP_LIVE_SETTINGS;
 // The operating system started this copy at sign-in. Nothing was clicked, so the dashboard stays out of
 // the way: the tray and the bubble are the surfaces until the user asks for the hub.
 const LAUNCHED_AT_LOGIN = !SMOKE && !LIVE_CHECK && autostart.launchedAtLogin(process.argv);
-const SMOKE_OUT = LIVE_OUT_ARG || valueAfter('--bop-out') || path.join(app.getPath('userData'), 'smoke');
+// Resolved, because it becomes a `userData` directory: a relative `--bop-out ./out` used to fail the whole
+// run at `app.setPath` with "Path must be absolute" before the harness could report anything.
+const SMOKE_OUT = path.resolve(LIVE_OUT_ARG || valueAfter('--bop-out') || path.join(app.getPath('userData'), 'smoke'));
 const SIDEBAR = 320;
 
 /** Shown on a space card when the page answered by refusing the browser instead of serving itself. */
@@ -69,15 +128,20 @@ function valueAfter(flag) {
 // Own userData directory, reset every run, so each run starts exactly like a first launch.
 if (SMOKE || LIVE_CHECK) {
   fs.mkdirSync(SMOKE_OUT, { recursive: true });
-  const isolated = LIVE_CHECK && LIVE_USER_DATA_ARG ? LIVE_USER_DATA_ARG : app.getPath('userData');
+  // A standalone smoke run gets a profile of its own beside its output; the live checker passes the one it
+  // prepared. It must never fall back to `app.getPath('userData')`: that is the real Bop profile, and this
+  // block *deletes* it for a smoke run — which is how a verification run once replaced the user's spaces
+  // with fixture ones (127.0.0.1 addresses that then alerted "could not load" on their next launch).
+  const isolated = LIVE_USER_DATA_ARG || path.join(SMOKE_OUT, 'profile');
   if (path.resolve(app.getPath('userData')) !== path.resolve(isolated)) app.setPath('userData', isolated);
-  // The live checker writes a controlled fixture profile before launch. Only the standalone smoke run
-  // owns and resets its profile; removing the live fixture here would silently replace it with defaults.
+  // Only a smoke run owns its profile outright, and only the one it just created for itself.
   if (SMOKE) fs.rmSync(isolated, { recursive: true, force: true });
   fs.mkdirSync(isolated, { recursive: true });
-  // Say it out loud rather than assume it: a smoke run that ever fell back to the real profile would
-  // write its own fixture spaces into the user's space list, and one of those (a `custom` space with
-  // no address) is exactly the state that used to open an empty pane. Refuse to run at all instead.
+  // Say it out loud rather than assume it: refuse to run at all if this resolved to the real profile.
+  const realProfile = process.env.APPDATA ? path.join(process.env.APPDATA, 'Bop') : null;
+  if (realProfile && path.resolve(isolated) === path.resolve(realProfile)) {
+    throw new Error('a verification run resolved its profile to the real Bop profile and must not run');
+  }
   if (!path.isAbsolute(isolated) || !fs.existsSync(isolated)) {
     throw new Error('a verification run could not isolate its profile and must not touch the real settings');
   }
@@ -106,16 +170,119 @@ if (!singleInstance) {
 // ---------------------------------------------------------------------------------------------
 const settingsPath = () => LIVE_CHECK && LIVE_SETTINGS_ARG ? LIVE_SETTINGS_ARG : path.join(app.getPath('userData'), 'bop-settings.bin');
 
+/**
+ * Notes live in a second file beside the settings.
+ *
+ * Why they moved: the whole state used to be one encrypted blob, and a note image is a base64 data URL of
+ * up to 500 KB (24 notes reach the 12 MB ceiling). Every save — an unread count changing, a watched page
+ * being read, a space resting or waking — therefore re-serialised, re-encrypted and re-wrote megabytes on
+ * the Electron main thread, which is the thread that also beats the tray, the bubble and every window's
+ * layout. Measured cost of one such save is in [tools/perf-notes.js] and docs/major-update-audit.md.
+ *
+ * Splitting the two means a background event writes a small settings file and leaves the note bodies on
+ * disk untouched. The note file is rewritten only when the note arrays themselves are replaced, which is
+ * an identity check because every mutation in this file builds a new array.
+ *
+ * Nothing about the on-disk note format changed: a settings file written by an older build still carries
+ * its notes, they are loaded from it exactly once, and the next save migrates them into their own file.
+ */
+const notesStorePath = () => `${settingsPath()}.notes`;
+/** The settings file without notes is small; anything near this bound is a corrupt or hand-edited file. */
+const SETTINGS_MAX_BYTES = 1_000_000;
+
+function decodeSettings(raw) {
+  if (raw.slice(0, 4).toString('utf8') === 'BOP0') return raw.slice(4).toString('utf8');
+  if (LIVE_CHECK) return raw.toString('utf8');
+  return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(raw) : null;
+}
+
+/** Serialises and seals one store. Returns null instead of allocating past [limit] bytes. */
+function encodeSettings(value, limit) {
+  const json = JSON.stringify(value);
+  const bytes = Buffer.byteLength(json, 'utf8');
+  if (bytes > limit) return null;
+  const payload = LIVE_CHECK ? Buffer.from(json, 'utf8')
+    : safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(json)
+      : Buffer.concat([Buffer.from('BOP0', 'utf8'), Buffer.from(json, 'utf8')]);
+  return { payload, bytes };
+}
+
+/**
+ * Writes through a temporary file, so a crash or a full disk during the write leaves the previous good
+ * store in place instead of a half-written one that would read back as "no notes at all".
+ */
+function writeStore(target, payload) {
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  const temporary = `${target}.tmp`;
+  fs.writeFileSync(temporary, payload);
+  fs.renameSync(temporary, target);
+}
+
+/** The note arrays last written, by identity. A new array is what a real note edit produces. */
+let savedNotesRef = null;
+let savedTombstonesRef = null;
+let notesStoreExists = false;
+/**
+ * Set when a note file exists but could not be decoded. It is reported until a real note edit replaces
+ * that file, so a later save of unrelated settings cannot quietly erase the one message saying the notes
+ * on disk were not read.
+ */
+let notesRestoreWarning = null;
+/** Counters behind the diagnostics surface; never anything the user typed. */
+const persistenceStats = { saves: 0, settingsBytes: 0, noteWrites: 0, noteBytes: 0 };
+
+function readNotesStore() {
+  let raw;
+  try {
+    raw = fs.readFileSync(notesStorePath());
+  } catch (_) {
+    return { status: 'missing' };
+  }
+  try {
+    const decoded = decodeSettings(raw);
+    const parsed = decoded ? JSON.parse(decoded) : null;
+    if (parsed && Array.isArray(parsed.notes)) {
+      return { status: 'ok', notes: parsed.notes, tombstones: Array.isArray(parsed.noteTombstones) ? parsed.noteTombstones : [] };
+    }
+    return { status: 'unreadable' };
+  } catch (_) {
+    return { status: 'unreadable' };
+  }
+}
+
 function loadSettings() {
   try {
     const raw = fs.readFileSync(settingsPath());
     if (raw.length > NOTES_MAX_STORAGE_BYTES + 65_536) return spaces.defaultState();
-    const decoded = raw.slice(0, 4).toString('utf8') === 'BOP0'
-      ? raw.slice(4).toString('utf8')
-      : LIVE_CHECK ? raw.toString('utf8')
-        : safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(raw) : null;
-    return decoded && Buffer.byteLength(decoded, 'utf8') <= NOTES_MAX_STORAGE_BYTES
-      ? spaces.normalize(JSON.parse(decoded)) : spaces.defaultState();
+    const decoded = decodeSettings(raw);
+    if (!decoded || Buffer.byteLength(decoded, 'utf8') > NOTES_MAX_STORAGE_BYTES) return spaces.defaultState();
+    const normalized = spaces.normalize(JSON.parse(decoded));
+    const store = readNotesStore();
+    if (store.status === 'ok') {
+      const notesSync = require('./notes-sync.js');
+      const all = notesSync.mergeNotesIncludingDeleted([], [...store.notes, ...store.tombstones]);
+      const merged = { ...normalized, notes: all.filter((note) => note.deletedAt <= 0),
+        noteTombstones: all.filter((note) => note.deletedAt > 0) };
+      notesStoreExists = true;
+      savedNotesRef = merged.notes;
+      savedTombstonesRef = merged.noteTombstones;
+      return merged;
+    }
+    if (store.status === 'unreadable') {
+      // Keep the note file that is there. Unless the note arrays are replaced by a real edit, the next
+      // save must not overwrite a store it could not read with whatever happens to be in memory.
+      notesStoreExists = true;
+      savedNotesRef = normalized.notes;
+      savedTombstonesRef = normalized.noteTombstones;
+      notesRestoreWarning = 'The saved notes could not be read; the note file was left on disk untouched.';
+      return normalized;
+    }
+    // No note file yet: this is a store from a build that kept notes in the settings file. Adopt them and
+    // let the next save write them out separately.
+    notesStoreExists = false;
+    savedNotesRef = null;
+    savedTombstonesRef = null;
+    return normalized;
   } catch (_) {
     return spaces.defaultState();
   }
@@ -123,18 +290,41 @@ function loadSettings() {
 
 function saveSettings() {
   try {
-    const json = JSON.stringify({ ...state, notes: notesWithTombstones(state.notes, state.noteTombstones || []), alerts: undefined });
-    if (Buffer.byteLength(json, 'utf8') > NOTES_MAX_STORAGE_BYTES) {
+    const tombstones = state.noteTombstones || [];
+    // Identity, not equality: every note mutation builds a new array, so a background save that did not
+    // touch notes can skip the whole encrypt-and-write step.
+    const notesChanged = !notesStoreExists || state.notes !== savedNotesRef || tombstones !== savedTombstonesRef;
+    const noteStore = notesChanged ? {
+      version: 1,
+      notes: notesWithTombstones(state.notes, tombstones),
+      noteTombstones: tombstones,
+    } : null;
+    const notesEncoded = noteStore ? encodeSettings(noteStore, NOTES_MAX_STORAGE_BYTES) : null;
+    if (noteStore && !notesEncoded) {
       diskError = 'Settings exceed the safe storage limit; remove some notes or images.';
       return false;
     }
-    const payload = LIVE_CHECK ? Buffer.from(json, 'utf8')
-      : safeStorage.isEncryptionAvailable()
-        ? safeStorage.encryptString(json)
-        : Buffer.concat([Buffer.from('BOP0', 'utf8'), Buffer.from(json, 'utf8')]);
-    fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
-    fs.writeFileSync(settingsPath(), payload);
-    diskError = safeStorage.isEncryptionAvailable() ? null : 'Settings are stored unencrypted: this system did not offer a key.';
+    const settingsEncoded = encodeSettings({ ...state, notes: undefined, noteTombstones: undefined, alerts: undefined }, SETTINGS_MAX_BYTES);
+    if (!settingsEncoded) {
+      diskError = 'Settings exceed the safe storage limit; remove some notes or images.';
+      return false;
+    }
+    if (notesEncoded) {
+      writeStore(notesStorePath(), notesEncoded.payload);
+      persistenceStats.noteWrites += 1;
+      persistenceStats.noteBytes += notesEncoded.payload.length;
+    }
+    writeStore(settingsPath(), settingsEncoded.payload);
+    persistenceStats.saves += 1;
+    persistenceStats.settingsBytes += settingsEncoded.payload.length;
+    if (noteStore) {
+      notesStoreExists = true;
+      savedNotesRef = state.notes;
+      savedTombstonesRef = tombstones;
+      notesRestoreWarning = null; // the unreadable file has now been replaced by real content
+    }
+    diskError = (safeStorage.isEncryptionAvailable() || LIVE_CHECK ? null : 'Settings are stored unencrypted: this system did not offer a key.')
+      || notesRestoreWarning;
     return true;
   } catch (failure) {
     diskError = `Settings could not be saved (${failure.message}).`;
@@ -144,6 +334,13 @@ function saveSettings() {
 
 let state = null;
 let alerts = [];
+let cacheBudgetJob = null;
+let cacheCheckTimer = null;
+let cacheTimer = null;
+let cacheUsageBytes = 0;
+let cacheBudgetOver = false;
+let cacheBudgetErrors = [];
+const cacheLastUsed = new Map();
 let diskError = null;
 let hovered = false;
 let autoStartError = null;
@@ -165,6 +362,16 @@ let suppressDockUntil = 0;
 let tray = null;
 
 const spaceViews = new Map();  // id -> WebContentsView
+/**
+ * webContents id -> the space that opened it, for sign-in popups.
+ *
+ * A popup created by `window.open` during a grant shares its opener's isolated session and preload, but it
+ * is not in [spaceViews]. The website-notification handler resolved an owner by searching [spaceViews], so
+ * a notification raised *inside an allowed sign-in popup* found nobody and was dropped in silence. The
+ * space is recorded here when the popup is created, so attribution stays Bop's decision and never the
+ * page's.
+ */
+const popupOwners = new Map();
 const monitors = new Map(); // Tiny state objects; reuse each existing authenticated view.
 const retryTimers = new Map(); // Only failed loads/renderers have a one-shot retry.
 let metadataTimer = null;
@@ -196,9 +403,22 @@ function persistMonitor(id) {
   }, 1000);
 }
 
-function stopSpace(id, forgetMetadata = false) {
+/**
+ * Closes a space's pane. Three things can lead here and they mean different things to the user:
+ *
+ * - the user turned the space off or cleared it: `/off`, forgotten everywhere, so `keepRemembered` is false;
+ * - the user asked for another space and there are more panes open than the budget allows: the space is
+ *   merely asleep — its session, its unread count and its place in the restore list all stay, so waking
+ *   it is a page load and nothing else;
+ * - a rebuild (the `keepPagesAlive` switch changes throttling inside a webContents, so the view has to be
+ *   built again), where the space is neither off nor asleep.
+ */
+function stopSpace(id, forgetMetadata = false, keepRemembered = false) {
   clearTimeout(retryTimers.get(id));
   retryTimers.delete(id);
+  restRunStart.delete(id);
+  restUntil.delete(id);
+  restUrls.delete(id);
   const view = spaceViews.get(id);
   spaceViews.delete(id); // Remove routing BEFORE close can emit renderer events.
   if (view) {
@@ -206,7 +426,13 @@ function stopSpace(id, forgetMetadata = false) {
     if (!view.webContents.isDestroyed()) view.webContents.close();
   }
   monitors.delete(id);
-  state = { ...state, loadedSlots: state.loadedSlots.filter(value => value !== id) };
+  if (keepRemembered) return;
+  state = {
+    ...state,
+    loadedSlots: state.loadedSlots.filter(value => value !== id),
+    // A space that is off, or whose data was cleared, is not asleep — it has to be set up again.
+    sleeping: (state.sleeping || []).filter(value => value !== id),
+  };
   if (forgetMetadata) {
     const monitorState = { ...state.monitorState };
     delete monitorState[id];
@@ -221,7 +447,9 @@ function retrySpace(id) {
   const delay = monitor.unavailable();
   clearTimeout(retryTimers.get(id));
   retryTimers.delete(id);
-  // Five bounded attempts; never loop forever against an unavailable provider.
+  // Five bounded attempts; never loop forever against an unavailable provider. The last failure is the
+  // one that used to be silent: no retry was scheduled and the space simply stopped announcing anything,
+  // with the fact written only in a status string on a dashboard the user may never open.
   if (monitor.failures <= 5) retryTimers.set(id, setTimeout(() => {
     retryTimers.delete(id);
     const view = spaceViews.get(id);
@@ -229,7 +457,38 @@ function retrySpace(id) {
     monitor.start(true);
     view.webContents.reload();
   }, delay));
+  else monitor.suspend();
+  applyHealth(id, monitor.status);
   broadcast();
+}
+
+/**
+ * Turns a monitoring status into the one card that space may carry about its own health.
+ *
+ * Kept in main.js rather than in the monitor because it is the only place that owns Alerts and the
+ * notification path; [monitor-health.js] decides *when* the user must be told.
+ */
+function applyHealth(id, nextStatus) {
+  const space = spaces.accountFor(state, id);
+  const monitor = monitors.get(id);
+  if (!space || !monitor) return;
+  const step = monitorHealth.transition(monitor.healthStatus, nextStatus);
+  monitor.healthStatus = nextStatus;
+  if (!step) return;
+  if (step.action === 'clear') {
+    const before = alerts.length;
+    alerts = alerts.filter((alert) => !(alert.spaceId === id && alert.tag === monitorHealth.HEALTH_TAG));
+    if (alerts.length !== before) broadcast();
+    return;
+  }
+  const described = monitorHealth.describe(step.code, space.label);
+  if (!described) return;
+  // One tag per space: a second failure replaces the first card instead of stacking, and the notify log
+  // still stops the same words from ringing twice in a row.
+  publishMessage(space, {
+    spaceId: id, tag: monitorHealth.HEALTH_TAG, kind: 'health',
+    title: described.title, body: described.body, source: 'monitor',
+  });
 }
 
 function publishMessage(space, alert, incoming = 1) {
@@ -243,7 +502,7 @@ function publishMessage(space, alert, incoming = 1) {
     notificationDiagnostics.lastSilent = !state.messageSound;
     const notice = new Notification({ title: alert.title, body: alert.body, silent: notificationDiagnostics.lastSilent });
     notice.on('show', () => { notificationDiagnostics.shown += 1; });
-    notice.on('click', () => focusSpace(space.id));
+    notice.on('click', () => openConversation(space.id));
     notice.on('failed', () => {
       notificationDiagnostics.failed += 1;
       const active = monitors.get(space.id);
@@ -276,24 +535,141 @@ function readTitle(id, title) {
 
 const PARTITION_PREFIX = 'persist:bop-';
 
-/**
- * The user agent a space asks to be served with — see `spaces.userAgentFor` for why it must not carry
- * the words Electron or Bop. Read at the moment of the call because a layout change has to reach the
- * engine before the reload that follows it.
- */
+/** Keep the embedded AI browser's real Electron identity; those providers can refuse embedded sign-in. */
 function agentFor(space) {
+  if (space?.kind === 'ai') return null;
   return spaces.userAgentFor(space, { chrome: process.versions.chrome, platform: process.platform });
 }
 
-/** Applies a space's layout mode to its live view. A layout is chosen per request, so a change needs
- *  the reload that `bop:set-phone-layout` performs — this only tells the engine what to send next. */
 function applyLayoutMode(id) {
   const view = spaceViews.get(id);
   const space = spaces.accountFor(state, id);
-  if (!view || !space) return null;
-  const agent = agentFor(space);
-  view.webContents.setUserAgent(agent);
-  return agent;
+  const agent = space && agentFor(space);
+  if (view && agent) view.webContents.setUserAgent(agent);
+}
+
+/**
+ * A sign-in flow that leaves the space's own hosts is the one block a task panel cannot work around:
+ * Prolific, UserTesting, Appen and custom panels all hand the browser to an identity provider (Google,
+ * Microsoft, an app's `auth.` or `app.` subdomain) and only come back after that page says yes. The old
+ * rule refused that navigation and opened the system browser instead, so the cookie that proves the
+ * login was written to *another* browser and the space stayed signed out forever.
+ *
+ * The fix is an explicit, per-space grant: the blocked page becomes a question in the hub ("allow this
+ * site for sign-in?"), the answer is stored with the space, and the navigation that was held back then
+ * continues inside the same isolated session. Grants are visible and revocable in the space's Edit
+ * dialog; nothing is allowed globally, and the catalog's own hosts still cannot be removed.
+ */
+const hostRequests = new Map(); // requestId -> { id, host, url, popup, resolve, key, timer }
+const hostRequestsByKey = new Map(); // `${spaceId}\n${url}` -> requestId, so a redirect storm asks once
+const trustedPopups = new Set(); // `id\nurl` a user has just allowed, for the one replayed window.open
+const HOST_REQUEST_MS = 60_000;
+
+function showHubForPermission() {
+  if (!shellWindow || shellWindow.isDestroyed() || !uiView || uiView.webContents.isDestroyed()) return false;
+  if (shellWindow.isMinimized()) shellWindow.restore();
+  if (!shellWindow.isVisible()) shellWindow.show();
+  shellWindow.focus();
+  layout();
+  return true;
+}
+
+/**
+ * Asks the user whether this one page may open inside this one space. Resolves to the same object it
+ * stores, with `allowed`; a timeout or a missing dashboard answers "no" rather than leaving the page
+ * held in limbo.
+ */
+function requestHostPermission(id, url, options = {}) {
+  const space = spaces.accountFor(state, id);
+  const host = spaces.hostnameOf(url);
+  // Plain http is only ever a loopback page (the same exception `pageAllowed` keeps), so a local panel
+  // under development can be asked about too; every real sign-in host is https.
+  const loopbackHttp = /^http:\/\//i.test(url) && ['localhost', '127.0.0.1', '::1'].includes(host);
+  if (!space || !host || (!/^https:\/\//i.test(url) && !loopbackHttp)) return Promise.resolve({ allowed: false, id, host, url });
+  if (spaces.pageAllowed(space, url)) return Promise.resolve({ allowed: true, id, host, url, alreadyAllowed: true });
+
+  const key = `${id}\n${url}`;
+  const existing = hostRequestsByKey.get(key);
+  if (existing && hostRequests.has(existing)) return hostRequests.get(existing).promise;
+
+  const requestId = randomUUID();
+  let settle;
+  const promise = new Promise((resolve) => { settle = resolve; });
+  const timer = setTimeout(() => settleHostRequest(requestId, false), HOST_REQUEST_MS);
+  const request = { requestId, id, host, url, popup: options.popup === true, key, timer, resolve: settle, promise };
+  hostRequests.set(requestId, request);
+  hostRequestsByKey.set(key, requestId);
+
+  if (!showHubForPermission()) {
+    settleHostRequest(requestId, false);
+    return promise;
+  }
+  uiView.webContents.send('bop:host-request', {
+    requestId,
+    spaceId: id,
+    label: space.label,
+    host,
+    url,
+    popup: request.popup,
+    reason: request.popup ? 'sign-in window' : 'sign-in page',
+  });
+  return promise;
+}
+
+/**
+ * The one place a grant is written. Registering it before the held navigation resumes matters: the
+ * resumed `loadURL` runs the navigation policy again, and it must already answer yes.
+ */
+function grantHost(id, host) {
+  state = spaces.grantHost(state, id, host);
+  saveSettings();
+  broadcast();
+}
+
+function settleHostRequest(requestId, allow) {
+  const request = hostRequests.get(requestId);
+  if (!request) return null;
+  clearTimeout(request.timer);
+  hostRequests.delete(requestId);
+  hostRequestsByKey.delete(request.key);
+  const allowed = allow === true;
+  if (allowed) grantHost(request.id, request.host);
+  // A grant can be refused by the bounded list (or the space can be gone by now), so the held
+  // navigation only resumes when the answer really is yes — otherwise it would ask again forever.
+  const current = allowed ? spaces.accountFor(state, request.id) : null;
+  const effective = !!current && spaces.pageAllowed(current, request.url);
+  request.resolve({ allowed: effective, id: request.id, host: request.host, url: request.url });
+  return request;
+}
+
+/**
+ * A blocked main-frame navigation. With `prompt` false (a background restore or watcher read) the
+ * navigation is still refused, but quietly: a page that redirected to a login host while nobody was
+ * looking must not throw a modal over the user's work.
+ */
+function holdNavigation(id, url, contents, prompt = true) {
+  const space = spaces.accountFor(state, id);
+  if (!space) return;
+  const host = spaces.hostnameOf(url);
+  const loopbackHttp = /^http:\/\//i.test(url) && ['localhost', '127.0.0.1', '::1'].includes(host);
+  if (!url || (!/^https:\/\//i.test(url) && !loopbackHttp)) {
+    if (url && /^https?:\/\//i.test(url)) shell.openExternal(url);
+    return;
+  }
+  if (!prompt) return;
+  void requestHostPermission(id, url).then((result) => {
+    if (result.allowed) {
+      if (!contents.isDestroyed()) contents.loadURL(url).catch(() => {});
+      return;
+    }
+    const current = spaces.accountFor(state, id);
+    // Saying no hands the link to the system browser, which is the old, honest behaviour. A card names
+    // what happened, so the empty pane is explained instead of looking broken.
+    shell.openExternal(url);
+    if (current) {
+      pushAlert({ spaceId: id, tag: `blocked:${result.host || Date.now()}`, kind: 'blocked', title: `${current.label} kept its own sites`, body: `You did not allow ${result.host || 'that site'}, so it opened in your browser instead. Allow it from Edit if it is the panel's sign-in page.` });
+    }
+  });
 }
 
 /** One Chromium session per space. This is the whole isolation story, and it is first-class. */
@@ -303,13 +679,54 @@ function sessionFor(id) {
     const space = spaces.accountFor(state, id);
     return space && (spaces.pageAllowed(space, origin) || (SMOKE && String(origin).startsWith('file://')));
   };
+  // What a granted page may ask its own browser for. Notifications and a camera/microphone are the
+  // ordinary task-panel asks; clipboard-read is how a panel's "paste the code" field works; fullscreen
+  // is how a study's video plays; top-level-storage-access is the cookie handshake some identity
+  // providers use when the login round-trip happens inside their own frame.
+  const SPACE_PERMISSIONS = ['notifications', 'media', 'fullscreen', 'clipboard-sanitized-write', 'clipboard-read', 'top-level-storage-access'];
   existing.setPermissionRequestHandler((contents, permission, callback, details) => {
     const origin = details.requestingUrl || contents?.getURL();
-    callback(!!allowedOrigin(origin) && ['notifications', 'media', 'fullscreen', 'clipboard-sanitized-write'].includes(permission));
+    callback(!!allowedOrigin(origin) && SPACE_PERMISSIONS.includes(permission));
   });
   existing.setPermissionCheckHandler((_contents, permission, origin) =>
-    !!allowedOrigin(origin) && ['notifications', 'media', 'fullscreen', 'clipboard-sanitized-write'].includes(permission));
+    !!allowedOrigin(origin) && SPACE_PERMISSIONS.includes(permission));
   return existing;
+}
+
+/**
+ * Enforces an aggregate budget on disposable Chromium HTTP caches. Electron exposes cache measurement
+ * and cache-only eviction; cookies, local storage and IndexedDB remain untouched. Chromium has no
+ * per-write quota, so a busy page can temporarily exceed the budget between checks.
+ */
+function enforceCacheBudget() {
+  if (cacheBudgetJob || !state) return cacheBudgetJob;
+  cacheBudgetJob = (async () => {
+    const entries = await Promise.all(state.spaces.map(async (space) => {
+      const target = session.fromPartition(`${PARTITION_PREFIX}${space.id.toLowerCase()}`);
+      return {
+        id: space.id,
+        lastUsed: cacheLastUsed.get(space.id) || 0,
+        size: await target.getCacheSize().catch(() => 0),
+        clear: () => target.clearCache(),
+        measure: () => target.getCacheSize(),
+      };
+    }));
+    const result = await storageBudget.enforce(entries, storageBudget.budgetBytes(state.cacheBudgetMb));
+    cacheUsageBytes = result.usageBytes;
+    cacheBudgetOver = result.overBudget;
+    cacheBudgetErrors = result.errors;
+    return result;
+  })().catch((error) => {
+    cacheBudgetErrors = [{ id: 'all', message: String(error?.message || error).slice(0, 160) }];
+    return null;
+  }).finally(() => { cacheBudgetJob = null; });
+  return cacheBudgetJob;
+}
+
+function scheduleCacheBudgetCheck(delay = 1000) {
+  clearTimeout(cacheCheckTimer);
+  cacheCheckTimer = setTimeout(() => { void enforceCacheBudget(); }, delay);
+  if (typeof cacheCheckTimer.unref === 'function') cacheCheckTimer.unref();
 }
 
 function preloadPath() {
@@ -349,21 +766,90 @@ function spaceView(id) {
   });
   const contents = view.webContents;
   let failedLoad = false;
-  contents.setUserAgent(agentFor(space));
-  contents.setWindowOpenHandler(({ url }) => {
-    if (spaces.pageAllowed(spaces.accountFor(state, id), url)) return { action: 'allow' };
-    if (url.startsWith('https://')) shell.openExternal(url);
+  const agent = agentFor(space);
+  if (agent) contents.setUserAgent(agent);
+  // A sign-in popup (Google/Microsoft/`window.open` auth) gets the same question the redirected page
+  // would get, and the same isolated session once allowed. `trustedPopups` carries the answer across
+  // the one replayed `window.open`, so the popup keeps its `window.opener` and can hand the result back.
+  const childOptions = () => ({
+    action: 'allow',
+    overrideBrowserWindowOptions: {
+      webPreferences: {
+        session: sessionFor(id), preload: spacePreloadPath(),
+        additionalArguments: [`--bop-space=${id}`],
+        contextIsolation: true, nodeIntegration: false, sandbox: false,
+      },
+    },
+  });
+  contents.setWindowOpenHandler(({ url, frameName }) => {
+    if (spaces.pageAllowed(spaces.accountFor(state, id), url)) return childOptions();
+    if (!url.startsWith('https://')) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    const key = `${id}\n${url}`;
+    if (trustedPopups.delete(key)) return childOptions();
+    void requestHostPermission(id, url, { popup: true }).then((result) => {
+      if (!result.allowed) {
+        shell.openExternal(url);
+        const current = spaces.accountFor(state, id);
+        if (current) {
+          pushAlert({ spaceId: id, tag: `blocked:${result.host || Date.now()}`, kind: 'blocked', title: `${current.label} blocked a sign-in window`, body: `${result.host || 'That site'} was not allowed, so the window opened in your browser instead.` });
+        }
+        return;
+      }
+      trustedPopups.add(key);
+      // Re-asking the page to open it keeps the opener relationship a real redirect would have kept.
+      if (!contents.isDestroyed()) {
+        contents.executeJavaScript(`window.open(${JSON.stringify(url)}, ${JSON.stringify(frameName || '_blank')})`, true).catch(() => {
+          trustedPopups.delete(key);
+          shell.openExternal(url);
+        });
+      }
+    });
     return { action: 'deny' };
   });
-  contents.on('will-navigate', (event, url) => {
-    if (!spaces.pageAllowed(spaces.accountFor(state, id), url)) {
-      event.preventDefault();
+  contents.on('did-create-window', (child) => {
+    const childContents = child.webContents;
+    popupOwners.set(childContents.id, id);
+    childContents.once('destroyed', () => popupOwners.delete(childContents.id));
+    const popupAgent = agentFor(spaces.accountFor(state, id) || space);
+    if (popupAgent) childContents.setUserAgent(popupAgent);
+    // The popup is a browser window for this sign-in only: an outside link goes back to the system
+    // browser, and a second popup is refused rather than multiplying windows nobody asked for.
+    childContents.setWindowOpenHandler(({ url }) => {
       if (url.startsWith('https://')) shell.openExternal(url);
-      pushAlert({ spaceId: id, tag: `blocked:${Date.now()}`, kind: 'blocked', title: `${space.label} blocked a navigation`, body: `This space only stays on ${spaces.hostsFor(space).join(', ') || 'its own site'}. The link was handed to your browser instead.` });
-    }
+      return { action: 'deny' };
+    });
+    // A sign-in window can itself redirect (Google does). It gets the same per-space question instead
+    // of a dead end, and its answer is the same grant the space would have received.
+    childContents.on('will-navigate', (event, url) => {
+      if (spaces.pageAllowed(spaces.accountFor(state, id), url)) return;
+      event.preventDefault();
+      holdNavigation(id, url, childContents, true);
+    });
+    childContents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
+      if (!isMainFrame || spaces.pageAllowed(spaces.accountFor(state, id), url)) return;
+      event.preventDefault();
+      holdNavigation(id, url, childContents, true);
+    });
+  });
+  contents.on('will-navigate', (event, url) => {
+    if (spaces.pageAllowed(spaces.accountFor(state, id), url)) return;
+    event.preventDefault();
+    holdNavigation(id, url, contents, true);
+  });
+  // A 302 after the login POST is the usual shape of a sign-in: it is not a `will-navigate` at all.
+  // A redirect on the pane the user is looking at gets the same question; one in a background restore
+  // is refused quietly, because nobody is there to answer a modal.
+  contents.on('will-redirect', (event, url, _isInPlace, isMainFrame) => {
+    if (!isMainFrame || spaces.pageAllowed(spaces.accountFor(state, id), url)) return;
+    event.preventDefault();
+    holdNavigation(id, url, contents, openSpaceId === id || (!!shellWindow && shellWindow.isVisible()));
   });
   contents.on('did-start-navigation', (_event, _url, inPlace, mainFrame) => {
     if (!mainFrame || inPlace) return;
+    cacheLastUsed.set(id, Date.now());
     failedLoad = false;
     const monitor = monitorFor(id);
     monitor.browserNote = null; // A refusal note belongs to the page that was loaded, not to the next one.
@@ -379,15 +865,29 @@ function spaceView(id) {
     const monitor = monitorFor(id);
     // A page that refused the browser is a page that loads perfectly and shows nothing usable, which
     // reads as "Bop is broken". Say what happened on the space card instead of leaving a blank pane.
-    monitor.browserNote = spaces.browserRefusal(contents.getURL(), contents.getTitle()) ? BROWSER_REFUSED_NOTE : null;
+    monitor.browserNote = spaces.browserRefusal(contents.getURL(), contents.getTitle())
+      ? current.kind === 'ai'
+        ? 'Google rejected this sign-in request. Edit this AI space and choose Open AI site in browser to restart from the official page; that browser session will not sync back into Bop.'
+        : BROWSER_REFUSED_NOTE
+      : null;
+    rememberThread(id, contents.getURL());
     monitor.ready(contents.getURL());
     readTitle(id, contents.getTitle()); // Baseline AFTER document load; never alert on historical unread.
+    // A load that landed on a working page is also the recovery signal for a space that had stopped.
+    applyHealth(id, monitor.status);
+    scheduleCacheBudgetCheck();
     broadcast();
   });
   contents.on('did-navigate-in-page', (_event, url, mainFrame) => {
     if (!mainFrame || !spaces.pageAllowed(spaces.accountFor(state, id), url)) return;
-    monitorFor(id).ready(url);
+    rememberThread(id, url);
+    const monitor = monitorFor(id);
+    monitor.ready(url);
+    // Moving inside the app re-renders its badge against the account's current state, so the reading that
+    // follows is a baseline and not an arrival; see [AccountMonitor.navigate].
+    monitor.navigate();
     readTitle(id, contents.getTitle());
+    applyHealth(id, monitor.status);
     broadcast();
   });
   contents.on('page-title-updated', (_event, title) => readTitle(id, title));
@@ -429,10 +929,17 @@ function applyViewOrder() {
 
 function layout() {
   if (!shellWindow || !uiView) return;
+  // A minimized window has no content rectangle: Windows reports the taskbar icon's own bounds for it
+  // (measured on this machine, on a hub the user had minimized: `160x28` at `-32000,-32000`). Laying the
+  // panes out from that rectangle is what turns every space into a one-pixel sliver that paints nothing —
+  // the blank pane that greets a user who restores a hub they had minimized. The layout that matters is
+  // the one that runs once the window is a window again, which is what the restore handlers below are for.
+  if (shellWindow.isMinimized()) return;
   const [width, height] = shellWindow.getContentSize();
   uiView.setBounds({ x: 0, y: 0, width, height });
   if (typeof uiView.setVisible === 'function') uiView.setVisible(shellWindow.isVisible());
   for (const [id, view] of spaceViews) {
+    if (view.webContents.isDestroyed()) continue;
     const open = id === openSpaceId;
     view.setBounds(open
       ? { x: SIDEBAR, y: 0, width: Math.max(width - SIDEBAR, 1), height }
@@ -444,6 +951,47 @@ function layout() {
     // Electron build that is also what kept the dashboard itself reporting `hidden`.
     if (typeof view.setVisible === 'function') view.setVisible(open);
   }
+}
+
+/**
+ * Puts the open pane back where it belongs and asks the engine to draw it again.
+ *
+ * The bounds are the same ones [layout] has just set; what this adds is the repaint. A pane whose window
+ * was hidden while it painted, or that was briefly laid out from a minimized window's rectangle, can come
+ * back as a white rectangle even though the page behind it is loaded and running — and a page the user
+ * cannot see reads exactly like a page that never loaded. `invalidate()` is the ask; it is idempotent and
+ * costs nothing for a pane that is already painted, so every transition into a visible window makes it.
+ */
+function repaintOpenPane() {
+  const view = openSpaceId ? spaceViews.get(openSpaceId) : null;
+  if (!view || view.webContents.isDestroyed()) return;
+  layout();
+  view.webContents.invalidate();
+}
+
+/**
+ * Verification-only timeline of a launch, written beside the acceptance run's other output.
+ *
+ * The live check measures the same ordering from outside through DevTools, and that is honest but coarse:
+ * on a machine still busy unpacking a fresh portable copy a round trip can lag by hundreds of milliseconds,
+ * so the comparison drifts. These are the app's own timestamps — the hub's first load and the moment each
+ * space's page was actually fetched — which makes "no page is fetched before the hub has loaded" a fact the
+ * process recorded rather than something inferred from two clocks that are not the same clock. Written only
+ * during an acceptance run.
+ */
+let startupTimeline = null;
+function recordStartup(kind, detail) {
+  if (!LIVE_CHECK) return;
+  startupTimeline = startupTimeline || { startedAt: APP_STARTED_AT, hubLoadedAt: null, pageLoadStartedAt: {} };
+  if (kind === 'hub') startupTimeline.hubLoadedAt = detail.at;
+  else if (kind === 'restore') startupTimeline.restore = detail;
+  // Who asked for a page is part of the record: the acceptance run opens spaces of its own later, and a
+  // page *it* fetched must never be counted as one the launch fetched behind the user's back.
+  else startupTimeline.pageLoadStartedAt[detail.id] = { at: detail.at, source: detail.source || 'open' };
+  try {
+    fs.mkdirSync(SMOKE_OUT, { recursive: true });
+    fs.writeFileSync(path.join(SMOKE_OUT, 'startup.json'), JSON.stringify(startupTimeline, null, 2));
+  } catch (_) { /* a report that cannot be written must never affect the app */ }
 }
 
 function createShellWindow() {
@@ -463,13 +1011,34 @@ function createShellWindow() {
     // this build, every pane reported `document.visibilityState === 'hidden'` and clamped its timers to
     // about one per second. Disabling background throttling is what makes a pane behave like the window
     // it is drawn in; the pages in it then keep their own rendering and timers at full rate.
-    webPreferences: { preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false },
+    // Throttled like any hidden page. This renderer draws the dashboard and has no monitoring duty — the
+    // space views and the watcher live in this process — so a hub behind other windows has no reason to
+    // keep a full-rate compositor. See [spaceView] for why the space views are the exception.
+    webPreferences: { preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: false },
   });
   shellWindow.contentView.addChildView(uiView);
   uiView.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // The hub's *own* document, and only the first time: a fresh WebContentsView also finishes loading its
+  // initial empty document, and a later reload must not move the moment the app reports as "the hub was
+  // ready". See [hubDocumentIsUp].
+  uiView.webContents.on('did-finish-load', () => {
+    if (!hubDocumentIsUp()) return;
+    if (startupTimeline && startupTimeline.hubLoadedAt) return;
+    recordStartup('hub', { at: Date.now() });
+    // Everything that can fetch a page waits on this exact moment rather than a snapshot guess at it; see
+    // [whenHubLoaded].
+    markHubReady();
+  });
   shellWindow.on('resize', layout);
-  shellWindow.on('show', layout);
+  // Every way back to a real window re-lays the panes out and asks the open one to paint again: a window
+  // that was minimized, maximized or restored by the user is exactly when a pane that was sized from the
+  // wrong rectangle has to be put right. `layout()` deliberately does nothing while minimized, so the
+  // work happens here, on the transition that ends it.
+  shellWindow.on('show', () => { layout(); repaintOpenPane(); });
   shellWindow.on('hide', layout);
+  shellWindow.on('restore', () => { layout(); repaintOpenPane(); });
+  shellWindow.on('maximize', () => { layout(); repaintOpenPane(); });
+  shellWindow.on('unmaximize', () => { layout(); repaintOpenPane(); });
   shellWindow.on('close', (event) => {
     if (!app.isQuitting && (tray || bubbleWindow)) {
       event.preventDefault();
@@ -510,22 +1079,235 @@ function openTargetFor(space) {
 }
 
 /**
+ * The live-page budget, and the whole of the RAM fix.
+ *
+ * 0.2.0 kept every space it had ever opened alive for the whole session, so a hub with six accounts held
+ * six Chromium renderers (measured on this machine: 12 processes, 1454 MB) and the second launch of a
+ * portable copy unpacked another 294 MB into `%TEMP%` on top of it. Panes are the only part of Bop whose
+ * cost grows with use, so the newest ones stay live and the oldest go to sleep: cookies, logins and watch
+ * fingerprints stay on disk in each space's partition, so waking one costs a page load and nothing more.
+ */
+// ---------------------------------------------------------------------------------------------
+// Rest cycle. A background space is not being read, but it still has to notice new messages, so it is
+// not held open all the time either. Each background space runs for REST_RUN_MS and then rests for
+// REST_MS: its page is closed (the renderer goes with it), while its session, its unread baseline and its
+// place in the restore list stay. When the rest is over the same page loads again, and its unread count is
+// compared with the count saved before the rest, so messages that arrived during the rest ring on that run.
+// The price is the delay: a message in a resting account is announced at its next run, up to one rest later.
+// An open space is never rested.
+// ---------------------------------------------------------------------------------------------
+const REST_RUN_MS = 45 * 1000;
+const REST_MS = 7 * 60 * 1000;
+const REST_TICK_MS = 15 * 1000;
+const restRunStart = new Map(); // id -> when the current run began (after the page finished loading)
+const restUntil = new Map();    // id -> when a resting space wakes
+const restUrls = new Map();     // id -> the page to load again after a rest
+let restTimer = null;
+
+function restSpace(id) {
+  const view = spaceViews.get(id);
+  if (!view || id === openSpaceId) return;
+  const url = view.webContents.getURL();
+  restRunStart.delete(id);
+  if (!url) return; // never loaded: nothing to rest yet
+  restUrls.set(id, url);
+  clearTimeout(retryTimers.get(id));
+  retryTimers.delete(id);
+  spaceViews.delete(id);
+  if (shellWindow && !shellWindow.isDestroyed()) shellWindow.contentView.removeChildView(view);
+  if (!view.webContents.isDestroyed()) view.webContents.close();
+  // The monitor stays on purpose: its unread count is the baseline the next run is measured against.
+  restUntil.set(id, Date.now() + REST_MS);
+  state = spaces.markSleeping(state, [id]);
+  saveSettings();
+  broadcast();
+}
+
+function resumeSpace(id) {
+  restUntil.delete(id);
+  const url = restUrls.get(id);
+  if (!url || openSpaceId === id || !spaces.accountFor(state, id)) return;
+  const view = spaceView(id);
+  if (!view) return;
+  // Keep the baseline when there is one: the page reports its count again, and a rise since the rest counts.
+  const monitor = monitorFor(id);
+  if (monitor.observed) monitor.start(true);
+  state = spaces.wake(state, id);
+  view.webContents.loadURL(url).catch(() => {}); // did-fail-load reports the error to Alerts.
+  layout();
+  broadcast();
+}
+
+function restTick() {
+  if (app.isQuitting) return;
+  const now = Date.now();
+  for (const [id, until] of [...restUntil]) if (now >= until) resumeSpace(id);
+  for (const [id, view] of [...spaceViews]) {
+    // A page still loading does not count toward its run; the run starts when it has finished.
+    if (id === openSpaceId || view.webContents.isDestroyed() || view.webContents.isLoading()) {
+      restRunStart.delete(id);
+      continue;
+    }
+    if (!restRunStart.has(id)) restRunStart.set(id, now);
+    if (now - restRunStart.get(id) >= REST_RUN_MS) restSpace(id);
+  }
+}
+
+function enforceLiveLimit() {
+  const doomed = spaces.spacesToSleep(state, { keepId: openSpaceId });
+  if (!doomed.length) return;
+  for (const id of doomed) stopSpace(id, false, true);
+  state = spaces.markSleeping(state, doomed);
+  saveSettings();
+  broadcast();
+}
+
+/** How many spaces are holding a live page right now: remembered, and not among the sleeping ones. */
+function livePageCount() {
+  const sleeping = new Set(state.sleeping || []);
+  return (state.loadedSlots || []).filter((id) => state.slots.includes(id) && !sleeping.has(id)).length;
+}
+
+/**
+ * Spends a budget that just grew.
+ *
+ * Choosing a bigger number in Settings is a request for more live pages, and a request that only took
+ * effect while the user happened to open the right spaces would read as a setting that does nothing. So
+ * the spaces the new budget can afford come back, most recently used first — the order [spacesToSleep]
+ * took them away in — and nothing is loaded beyond it. `0` means "no ceiling": everything remembered
+ * comes back, which is exactly what that option promises.
+ */
+function wakeBudgetedSpaces() {
+  const limit = spaces.liveLimitOf(state);
+  const remembered = (state.loadedSlots || []).filter((id) => state.slots.includes(id));
+  const sleeping = new Set(state.sleeping || []);
+  const asleep = remembered.filter((id) => sleeping.has(id)).reverse();
+  if (!asleep.length) return;
+  const room = limit <= 0 ? asleep.length : Math.max(limit - livePageCount(), 0);
+  if (room <= 0) return;
+  for (const id of asleep.slice(0, room)) {
+    state = spaces.wake(state, id);
+    loadSpaceInBackground(id, 'budget');
+  }
+  saveSettings();
+  broadcast();
+}
+
+/**
+ * Whether the web content that just reported a completed load is the hub's *own* page. A fresh
+ * WebContentsView also finishes loading its initial empty document, so the URL — not the event — is what
+ * tells the two apart. Deliberately not `isLoading()` either: at `did-finish-load` the load has completed
+ * but Chromium may still report one in progress until `did-stop-loading`, and requiring otherwise skipped
+ * the moment entirely.
+ */
+function hubDocumentIsUp() {
+  return !!uiView && !uiView.webContents.isDestroyed() && uiView.webContents.getURL().endsWith('/renderer/index.html');
+}
+
+/**
+ * Runs held until the hub's own document has finished loading — the same event, and the same URL test, as the
+ * hub mark in the launch timeline, so "after the hub" is the app's own fact and not a second guess at it.
+ *
+ * Every snapshot-based version of this gate was wrong on some launch: the empty document's load counts, and
+ * `loadFile` sets the URL synchronously, so asking "is the hub up yet?" just after it can answer yes while
+ * Chromium has not yet reported a load in progress (measured on a portable launch: the restore countdown
+ * started ~200 ms early and the first page was fetched 207 ms after the hub mark instead of 400 ms).
+ */
+let hubReady = false;
+const hubReadyHooks = [];
+function markHubReady() {
+  hubReady = true;
+  for (const hook of hubReadyHooks.splice(0)) hook();
+}
+
+/**
+ * Runs once the hub's own document has loaded — what the restore queue waits for.
+ *
+ * A fixed timer cannot do this job. The acceptance run measured a cold portable start taking 1.5 s from
+ * the app's first line to the hub's first load (the launcher unpacks ~190 MB first), which is past any
+ * fixed head start, and the run caught the result: the first remembered page was already being fetched
+ * while the hub was still loading. Waiting for the event makes the ordering true by construction on a slow
+ * machine and a fast one alike, and the bounded fallback means a hub that never finishes loading cannot
+ * cost the user the spaces that were open.
+ */
+function whenHubLoaded(run) {
+  // Already loaded, or no hub to wait for: the moment has been and gone.
+  if (hubReady || !uiView || uiView.webContents.isDestroyed()) { setImmediate(run); return; }
+  let done = false;
+  const fallback = setTimeout(() => { if (done) return; done = true; run(); }, 8000);
+  hubReadyHooks.push(() => {
+    if (done) return;
+    done = true;
+    clearTimeout(fallback);
+    run();
+  });
+}
+
+/**
+ * Brings back the spaces that were open when Bop last quit — after the hub has painted, one at a time,
+ * and only up to the live-page budget.
+ *
+ * This is the startup fix. Restoring used to load every remembered space synchronously inside
+ * `whenReady`, so the dashboard appeared only once every account's page had been fetched; with four spaces
+ * the user saw nothing for the time it takes four sites to load. Now the hub is first, the panes follow,
+ * and anything past the budget is marked asleep straight away instead of being loaded only to be closed.
+ */
+function restoreRememberedSpaces() {
+  const remembered = [...new Set(state.loadedSlots || [])].filter((id) => state.slots.includes(id));
+  if (!remembered.length) return;
+  // Most recently opened first: that is the space the user is most likely looking at.
+  const queue = remembered.slice().reverse();
+  const limit = spaces.liveLimitOf(state);
+  const waking = limit <= 0 ? queue : queue.slice(0, limit);
+  const stillAsleep = limit <= 0 ? [] : queue.slice(limit);
+  if (stillAsleep.length) {
+    state = spaces.markSleeping(state, stillAsleep);
+    saveSettings();
+  }
+  // The launch's own account of what it was going to fetch, written before the first page is: the
+  // acceptance run checks the budget against this list instead of counting pages after the fact, because
+  // the run itself opens spaces later and those fetches are not the launch's.
+  recordStartup('restore', { limit, waking: [...waking], asleep: [...stillAsleep], at: Date.now() });
+  whenHubLoaded(() => {
+    const step = () => {
+      const id = waking.shift();
+      if (!id) { enforceLiveLimit(); return; }
+      // The user may have turned the space off, or cleared it, in the meantime: a space that is no longer
+      // remembered must not be brought back behind their back by a queue they cannot see.
+      if ((state.loadedSlots || []).includes(id)) loadSpaceInBackground(id, 'restore');
+      setTimeout(step, RESTORE_STEP_MS);
+    };
+    setTimeout(step, HUB_SETTLE_MS);
+  });
+}
+
+/**
  * Loads a space's page into its own view and returns that view, or null when the space has no page to
  * load. A space with no address never gets a view created for it: an empty pane covers the hub and eats
  * the clicks meant for it, which is the state measured on 0.1.4 (see [spaces.openTarget]).
  */
-function loadSpaceInBackground(id) {
+function loadSpaceInBackground(id, source = 'open') {
   const space = spaces.accountFor(state, id);
   if (!space) return null;
   const target = openTargetFor(space);
   if (target.error) return null;
   const view = spaceView(id);
   if (!view) return null;
+  // A conversation the caller asked for is the *first* thing this view loads, not a second load on top of
+  // the inbox: the previous form opened the space and then navigated, so every notification click cost two
+  // page loads and threw away whatever the first one had already painted.
+  const wanted = pendingThreads.get(id);
   if (!view.webContents.getURL()) {
     state = spaces.rememberLoaded(state, id);
     saveSettings();
-    view.webContents.loadURL(target.url).catch(() => {}); // did-fail-load reports the error to Alerts.
+    recordStartup('page', { id, at: Date.now(), source });
+    view.webContents.loadURL(wanted || target.url).catch(() => {}); // did-fail-load reports the error to Alerts.
+  } else if (wanted && !threads.sameThread(view.webContents.getURL(), wanted)) {
+    // The space was already open somewhere else (usually its inbox), so the conversation still has to be
+    // fetched — but only when it is a different conversation than the one on screen.
+    view.webContents.loadURL(wanted).catch(() => {});
   }
+  pendingThreads.delete(id);
   layout();
   return view;
 }
@@ -535,9 +1317,13 @@ function loadSpaceInBackground(id) {
  * for that space, so a broken space is one click away from being fixed instead of an empty pane the user
  * cannot click out of.
  */
-function openSpace(id) {
+function openSpace(id, threadUrl) {
   const space = spaces.accountFor(state, id);
   if (!space) return { ok: false, error: 'That space does not exist any more.' };
+  // Routed through the map rather than passed down: the view is created inside [loadSpaceInBackground], and a
+  // space that is already asleep has to reach the conversation the same way when it wakes.
+  if (threadUrl) pendingThreads.set(id, threadUrl);
+  cacheLastUsed.set(id, Date.now());
   const target = openTargetFor(space);
   if (target.error) {
     // Close whatever pane is open: the user asked for this space, and leaving the previous one on screen
@@ -553,9 +1339,15 @@ function openSpace(id) {
     monitors.get(id).start(true);
     spaceViews.get(id).webContents.reload();
   }
+  // Opening a space is also waking it: the budget keeps what the user is actually using.
+  state = spaces.wake(state, id);
   openSpaceId = id;
   layout();
+  // Opening a space is the moment a pane the user asked for must paint, whatever state the window, the
+  // budget or an earlier minimize left it in.
+  repaintOpenPane();
   broadcast();
+  enforceLiveLimit();
   return { ok: true };
 }
 
@@ -816,6 +1608,7 @@ const POPUP_HEIGHT = 128;
 let reminderWindow = null;
 let reminderQueue = popup.empty();
 let reminderTimer = null;
+let reminderShowTimer = null;
 let reminderLoaded = false;
 
 /** The bubble's rectangle, so the card can step around it instead of covering it. */
@@ -856,7 +1649,15 @@ function showReminder(alert) {
   reminderTimer = setTimeout(hideReminder, popup.POPUP_MS);
 }
 
-/** showInactive: a reminder must never take the keyboard focus from what the user is doing. */
+/**
+ * The card is shown on the frame that carries its content, not on the frame the IPC was sent from.
+ *
+ * The live acceptance run caught the difference: the window was made visible as soon as the payload had
+ * been handed to the renderer, so for a frame the card read "NEW ALERT" with an empty title and body — a
+ * flash of the wrong content on the one surface whose whole job is to be read at a glance. The renderer
+ * asks for its show back after the frame is drawn; the timer is the safety net, so a wedged renderer can
+ * delay the card but never swallow it.
+ */
 function deliverReminder() {
   const card = popup.card(reminderQueue);
   if (!card || !reminderWindow || reminderLoaded === false) return;
@@ -867,12 +1668,22 @@ function deliverReminder() {
     accent: space ? spaces.hexColor(space.appId) : null,
     spaceLabel: space ? space.label : null,
   });
-  reminderWindow.showInactive();
+  clearTimeout(reminderShowTimer);
+  reminderShowTimer = setTimeout(showReminderNow, 500);
+}
+
+/** showInactive: a reminder must never take the keyboard focus from what the user is doing. */
+function showReminderNow() {
+  clearTimeout(reminderShowTimer);
+  reminderShowTimer = null;
+  if (reminderWindow && !reminderWindow.isDestroyed()) reminderWindow.showInactive();
 }
 
 function hideReminder() {
   clearTimeout(reminderTimer);
   reminderTimer = null;
+  clearTimeout(reminderShowTimer);
+  reminderShowTimer = null;
   reminderQueue = popup.dismiss();
   if (reminderWindow && !reminderWindow.isDestroyed()) reminderWindow.hide();
 }
@@ -888,14 +1699,35 @@ function focusSpace(id) {
   showDashboard(id);
 }
 
+/** The conversation page each space was last on, so a notification can open that chat instead of the inbox. */
+const threadUrls = new Map();
+/** A conversation a caller asked for that the space's view has not loaded yet; consumed by the next load. */
+const pendingThreads = new Map();
+
+function rememberThread(id, url) {
+  if (threads.isThreadUrl(url)) threadUrls.set(id, url);
+}
+
+/** Opens the space and, when Bop saw a conversation open in it, goes to that conversation. Messenger does not
+ * report which thread a new message is in, so this is the last conversation the user had open in the space. */
+function openConversation(id) {
+  showDashboard(id, threadUrls.get(id));
+}
+
 /** Bring the hub forward. With an id it opens that space and jumps to Alerts; without one it just
  * shows the bento dashboard, which is what the "open the dashboard" double-click action wants. */
-function showDashboard(id) {
+function showDashboard(id, threadUrl) {
   if (!shellWindow) return;
+  // `show()` alone does not un-minimize a window: Windows keeps it minimized, so the tray icon and a
+  // second launch would look like they did nothing at all. Restore first, then show, then lay out — the
+  // order matters, because the panes have to be measured against the window the user is about to see.
+  if (shellWindow.isMinimized()) shellWindow.restore();
   shellWindow.show();
   shellWindow.focus();
+  layout();
+  repaintOpenPane();
   if (id) {
-    openSpace(id);
+    openSpace(id, threadUrl);
     uiView.webContents.send('bop:focus-space', id);
   } else {
     closeSpace();
@@ -975,6 +1807,7 @@ async function readSpace(space) {
 
 let watcherRunning = false;
 let watcherTimer = null;
+let watcherWaitingForHub = false;
 
 function scheduleWatcher() {
   const watched = state && state.watchWhileRunning && spaces.enabledSpaces(state).filter(space => space.watch.enabled);
@@ -982,10 +1815,22 @@ function scheduleWatcher() {
   if (watcherTimer || watcherRunning || SMOKE) return;
   const now = Date.now();
   const next = Math.min(...watched.map(space => (space.watch.lastCheckAt || 0) + watcher.intervalMinutes(space.watch) * 60_000));
-  watcherTimer = setTimeout(async () => {
+  watcherTimer = setTimeout(() => {
     watcherTimer = null;
-    try { await readAlertingSpaces(); }
-    finally { scheduleWatcher(); }
+    // Read a space that is not loaded and it is loaded first (see [readSpace]), so the watcher is the second
+    // background thing that can fetch a page — and its timer is one second, which on a slow portable launch
+    // fired ~1.3 s *before* the hub document finished loading. Measured: a watched space's page was fetched
+    // 1311 ms before the hub mark, and the launch check called it a page fetched before the hub.
+    if (watcherWaitingForHub) return; // One wait, however many times a broadcast re-schedules it.
+    watcherWaitingForHub = true;
+    whenHubLoaded(() => {
+      // And the same settle window the restore queue keeps (see [HUB_SETTLE_MS]): the hub has loaded, and
+      // nothing fetches a page until it has had that long to itself.
+      setTimeout(() => {
+        watcherWaitingForHub = false;
+        void readAlertingSpaces().finally(() => scheduleWatcher());
+      }, HUB_SETTLE_MS);
+    });
   }, Math.max(next - now, 1000));
 }
 
@@ -1039,10 +1884,29 @@ function notesWithTombstones(first, second) {
   return [...byId.values()].sort((left, right) => Math.max(left.timestamp, left.deletedAt) - Math.max(right.timestamp, right.deletedAt) || left.id.localeCompare(right.id)).slice(-notesSync.MAX_MESSAGES);
 }
 
+/**
+ * What every window is told about a note. The attachment body itself is dropped.
+ *
+ * A note image is a base64 data URL of up to 500 KB, and this snapshot is structured-cloned into up to
+ * four renderers after *every* monitor event — a title rising in a busy chat, a watched page being read,
+ * a space resting. Sending the bodies made each of those events copy megabytes that no dashboard surface
+ * draws: the Notes page only says "Image attached" and the note editor reads its own
+ * `bop:notes-snapshot`. The flag keeps that line true without the payload.
+ */
+function notePreview(note) {
+  return {
+    id: note.id,
+    sender: note.sender,
+    timestamp: note.timestamp,
+    text: note.text,
+    image: !!note.image,
+  };
+}
+
 function snapshot() {
   return {
     spaces: state.spaces,
-    notes: state.notes,
+    notes: (state.notes || []).map(notePreview),
     notesSync: { enabled: state.notesEnabled, running: !!notesServer, error: notesSyncError,
       token: state.notesToken || '', port: notesSync.PORT, addresses: notesSync.localAddresses(),
       pairingCode: state.notesEnabled ? notesSync.makePairingCode(state.notesToken).code : '',
@@ -1059,10 +1923,18 @@ function snapshot() {
       pending: spaces.pendingFor(alerts, space.id),
       open: space.id === openSpaceId,
       loaded: spaceViews.has(space.id) && !!spaceViews.get(space.id).webContents.getURL(),
+      // Open, but closed by the live-page budget to keep RAM flat. The UI says so and opening it again
+      // wakes it; the word "stopped" would be wrong, because nothing about the space was turned off.
+      sleeping: (state.sleeping || []).includes(space.id),
       monitoring: monitors.get(space.id)?.status || 'not-loaded',
       unread: monitors.get(space.id)?.unread ?? null,
       notificationStatus: monitors.get(space.id)?.notificationStatus || null,
       browserNote: monitors.get(space.id)?.browserNote || null,
+      // Monitoring health, as timestamps only — never page content. A user (or a support question) can tell
+      // "nothing arrived" from "nothing was being watched".
+      lastReadyAt: monitors.get(space.id)?.lastReadyAt || 0,
+      lastAlertAt: monitors.get(space.id)?.lastEventAt || 0,
+      monitoringStopped: monitors.get(space.id)?.status === 'monitoring-stopped',
     })),
     alerts,
     theme: state.theme,
@@ -1076,6 +1948,14 @@ function snapshot() {
     watchWhileRunning: state.watchWhileRunning,
     messageSound: state.messageSound,
     keepPagesAlive: state.keepPagesAlive !== false,
+    liveLimit: spaces.liveLimitOf(state),
+    liveLimits: spaces.LIVE_LIMITS,
+    cacheBudgetMb: state.cacheBudgetMb,
+    cacheBudgets: storageBudget.BUDGETS_MB,
+    cacheUsageMb: Math.ceil(cacheUsageBytes / storageBudget.MB),
+    cacheBudgetOver,
+    cacheBudgetErrors,
+    sleeping: state.sleeping || [],
     startAtLogin: state.startAtLogin !== false,
     notesUiEnabled: state.notesEnabled === true,
     notesSyncRunning: !!notesServer,
@@ -1315,6 +2195,44 @@ function registerIpc() {
     return { ok: true };
   });
 
+  // The irreversible twin of "Remove": the space entry and this space's Chromium profile are both
+  // erased. Used for a task panel that was added twice, which otherwise keeps a second signed-in
+  // session and a second name alive after the user believes it is gone.
+  ipcMain.handle('bop:delete-space', async (_event, id) => {
+    if (typeof id !== 'string' || spaces.DEFAULT_SLOTS.includes(id)) {
+      return { ok: false, error: 'Keep the two base spaces; hide or stop them instead.' };
+    }
+    if (!spaces.accountFor(state, id)) return { ok: false, error: 'That space does not exist any more.' };
+    stopSpace(id, true);
+    alerts = alerts.filter(alert => alert.spaceId !== id);
+    state = spaces.deleteSlot(state, id);
+    try {
+      const target = session.fromPartition(`${PARTITION_PREFIX}${id.toLowerCase()}`);
+      await target.clearStorageData();
+      await target.clearCache();
+    } catch (_) {
+      // The space is gone even if a locked profile refused the sweep; say nothing and keep the delete.
+    }
+    saveSettings();
+    layout();
+    broadcast();
+    return { ok: true };
+  });
+
+  // The user's answer to the sign-in permission card. `allow` also resumes the navigation that was
+  // held back; a refusal has already been handed to the system browser by the caller.
+  ipcMain.handle('bop:host-permission', (_event, requestId, allow) => {
+    const settled = settleHostRequest(requestId, allow === true);
+    return { ok: !!settled };
+  });
+
+  ipcMain.handle('bop:revoke-host', (_event, id, host) => {
+    state = spaces.revokeHost(state, id, host);
+    saveSettings();
+    broadcast();
+    return { ok: true, space: spaces.accountFor(state, id) };
+  });
+
   ipcMain.handle('bop:rename', (_event, id, label) => { state = spaces.rename(state, id, label); saveSettings(); broadcast(); return { ok: true }; });
   ipcMain.handle('bop:select-app', (_event, id, appId, kind) => {
     const previous = spaces.accountFor(state, id);
@@ -1357,6 +2275,24 @@ function registerIpc() {
     if (key === 'messageSound') state = { ...state, messageSound: value === true };
     if (key === 'bubble') { setBubbleRunning(value === true); return { ok: true }; }
     if (key === 'startAtLogin') { setStartAtLogin(value === true); return { ok: true }; }
+    if (key === 'liveLimit') {
+      state = spaces.setLiveLimit(state, value);
+      // A smaller budget takes effect at once rather than at the next launch; a bigger one is spent on the
+      // spaces it can now afford, so the number the user chose means something the moment they choose it.
+      enforceLiveLimit();
+      wakeBudgetedSpaces();
+      state = spaces.markSleeping(state, state.loadedSlots.filter((id) => !spaceViews.has(id)));
+      saveSettings();
+      broadcast();
+      return { ok: true, liveLimit: spaces.liveLimitOf(state), sleeping: state.sleeping || [] };
+    }
+    if (key === 'cacheBudgetMb') {
+      state = spaces.setCacheBudget(state, value);
+      saveSettings();
+      scheduleCacheBudgetCheck(0);
+      broadcast();
+      return { ok: true, cacheBudgetMb: state.cacheBudgetMb };
+    }
     if (key === 'keepPagesAlive') {
       const next = value === true;
       if (next !== (state.keepPagesAlive !== false)) {
@@ -1409,6 +2345,31 @@ function registerIpc() {
   });
 
   ipcMain.handle('bop:open-space', (_event, id) => openSpace(id));
+  ipcMain.handle('bop:open-ai-in-browser', async (_event, id) => {
+    const space = spaces.accountFor(state, id);
+    const app = space && spaces.appById(space.appId);
+    if (!space || space.kind !== 'ai' || !app || app.kind !== 'ai' || !/^https:\/\//i.test(app.home)) {
+      return { ok: false, error: 'This AI space is unavailable.' };
+    }
+    try {
+      await shell.openExternal(app.home);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error).slice(0, 160) };
+    }
+  });
+  ipcMain.handle('bop:open-site-in-browser', async (_event, id) => {
+    const space = spaces.accountFor(state, id);
+    if (!space) return { ok: false, error: 'This space is unavailable.' };
+    const url = spaces.homeFor(space);
+    if (!url || !spaces.pageAllowed(space, url)) return { ok: false, error: 'This site cannot be opened safely.' };
+    try {
+      await shell.openExternal(url);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error).slice(0, 160) };
+    }
+  });
   ipcMain.handle('bop:close-space', () => { closeSpace(); return { ok: true }; });
   ipcMain.handle('bop:reload-space', (_event, id) => {
     // Reloading must not *create* a pane: a space with no address would get an empty view that covers
@@ -1468,6 +2429,8 @@ function registerIpc() {
     if (typeof id === 'string' && spaces.accountFor(state, id)) focusSpace(id);
   });
   ipcMain.on('bop:reminder-hide', () => hideReminder());
+  // Only an outstanding delivery can be completed this way, so a stray message cannot raise a hidden card.
+  ipcMain.on('bop:reminder-painted', () => { if (reminderShowTimer) showReminderNow(); });
 
   // A dialog is up in the dashboard: keep the dashboard view above the space panes while it is, so the
   // dialog is not just visible but clickable (see [applyViewOrder]).
@@ -1500,9 +2463,10 @@ function registerIpc() {
   ipcMain.on('bop:menu-close', () => { if (menuWindow) { menuWindow.close(); menuWindow = null; } });
   ipcMain.on('bop:web-notification', (event, payload) => {
     if (event.senderFrame !== event.sender.mainFrame) return;
-    const owner = [...spaceViews.entries()].find(([, view]) => view.webContents.id === event.sender.id);
-    if (!owner) return;
-    const space = spaces.accountFor(state, owner[0]);
+    const ownerId = [...spaceViews.entries()].find(([, view]) => view.webContents.id === event.sender.id)?.[0]
+      || popupOwners.get(event.sender.id);
+    if (!ownerId) return;
+    const space = spaces.accountFor(state, ownerId);
     if (!space || !(spaces.pageAllowed(space, event.sender.getURL()) || (SMOKE && event.sender.getURL().startsWith('file://')))) return;
     const alert = spaces.webAlert(space, payload);
     if (alert && monitorFor(space.id).website(payload)) publishMessage(space, alert);
@@ -1698,7 +2662,13 @@ async function smokeRun() {
     if (merged.length !== 1 || merged[0].sender !== 'Android') throw new Error('the Android-compatible encrypted notes client did not complete its LAN round trip');
     const deleted = notesSync.normalizeNote({ ...noteRead, text: '', deletedAt: Date.now() });
     const afterDelete = await notesSync.syncWithDesktop('127.0.0.1', address.port, notesToken, [deleted]);
-    if (afterDelete.length !== 0 || syncedNotes.length !== 0) throw new Error('a note deleted on a paired device was not removed from the desktop');
+    // Both sides carry the deletion as a tombstone on purpose — that is what stops a peer reintroducing a
+    // note it still holds — and [syncNotesWithPair] filters those out before they reach the list the user
+    // sees, exactly as this does. So the check is on both halves: no *visible* note survives on either
+    // side, and the tombstone itself is still there to keep them converged.
+    const visible = (list) => list.filter((note) => note.deletedAt <= 0);
+    if (visible(afterDelete).length !== 0 || visible(syncedNotes).length !== 0) throw new Error('a note deleted on a paired device was still visible on the desktop');
+    if (!syncedNotes.some((note) => note.id === noteRead.id && note.deletedAt > 0)) throw new Error('the deletion was not kept as a tombstone, so a peer could bring the note back');
   } finally { await notesServer.close(); }
 
   // 0b. A fresh profile starts with the bubble running, keeps its pages alive, and asks the machine to
@@ -1727,6 +2697,16 @@ async function smokeRun() {
   record('autostart', JSON.stringify({ ...autoStartInfo(), executable: app.isPackaged ? 'app' : 'development' }));
   if (app.isPackaged && !autoStartInfo().supported) throw new Error('a packaged build must be able to register a start-up entry');
   if (!app.isPackaged && autoStartInfo().registered) throw new Error('a development run registered itself: that would launch a bare Electron at sign-in');
+
+  // 0e. The Chromium services Bop switches off really were switched off. `appendSwitch` silently does
+  //     nothing when it is called after the browser process has started, so this is read back from the
+  //     live command line instead of trusted, and the notification and pane-throttling steps below are what
+  //     prove the switches did not take anything Bop needs with them.
+  const disabledFeatures = app.commandLine.getSwitchValue('disable-features').split(',').filter(Boolean);
+  record('startup-flags', JSON.stringify({ disabled: disabledFeatures, renderers: app.getAppMetrics().filter((m) => m.type === 'Tab').length, processes: app.getAppMetrics().length }));
+  for (const feature of ['MediaRouter', 'GlobalMediaControls', 'CalculateNativeWinOcclusion', 'Translate']) {
+    if (!disabledFeatures.includes(feature)) throw new Error(`${feature} was not disabled on the real command line`);
+  }
 
   // 1. Spaces exist, are isolated, and the model round-trips through real persistence.
   const first = spaces.enabledSpaces(state);
@@ -1901,6 +2881,14 @@ async function smokeRun() {
     record('hidden-account-notification', JSON.stringify({ hidden: !shellWindow.isVisible(), A: later?.body, B: untouched?.body }));
     if (later?.body !== 'Second message' || untouched?.body !== 'First message') throw new Error('hidden session lost or misrouted its notification');
     shellWindow.show();
+
+    // 3c. The live-page budget is measured by tools/live-check.js instead of here, and deliberately: this
+    //     smoke has only the two spaces the hub starts with plus the watched one, so exceeding a budget of
+    //     three needs the fourth slot — and that slot is where step 5b creates a fresh space to prove a new
+    //     space picks the layout that fits. Enabling it here would leave 5b measuring a space that already
+    //     existed. The live check has a four-space fixture and asserts the budget, the renderer count and
+    //     the swap on wake; this run keeps its own two claims (the feature flags below and the smoke steps
+    //     that follow).
   } finally {
     fixture.closeAllConnections();
     await new Promise(resolve => fixture.close(resolve));
@@ -1913,6 +2901,63 @@ async function smokeRun() {
   const allowed = spaces.pageAllowed(spaces.accountFor(state, watchId), 'https://evil.test/');
   record('navigation-policy', `outside-host-allowed=${allowed}`);
   if (allowed) throw new Error('an outside host was allowed');
+
+  // 4b. A task panel's sign-in continues on another host. That redirect is not an ordinary outside
+  //     link: it is held, asked about by name, and resumed in the same isolated session once the user
+  //     allows it. Then the space is deleted through the real IPC, which must also drop its pane.
+  const signInHost = require('node:http').createServer((request, response) => {
+    if (request.url === '/start') {
+      response.statusCode = 302;
+      response.setHeader('Location', `http://localhost:${signInHost.address().port}/after`);
+      response.end();
+      return;
+    }
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.end('<!doctype html><title>Signed in</title><body>Signed in</body>');
+  });
+  // Listen on every interface so `127.0.0.1/start` and `localhost/after` both reach this one server.
+  await new Promise((resolve) => signInHost.listen(0, resolve));
+  try {
+    const port = signInHost.address().port;
+    const id = spaces.nextFree(state);
+    state = spaces.enableSlot(state, id, { appId: 'custom', kind: 'tasks', url: `http://127.0.0.1:${port}/start` });
+    saveSettings();
+    openSpace(id);
+    const requestId = await new Promise((resolve) => {
+      const deadline = Date.now() + 8000;
+      const poll = () => {
+        const found = [...hostRequests.values()].find((value) => value.id === id);
+        if (found) resolve(found.requestId);
+        else if (Date.now() < deadline) setTimeout(poll, 50);
+        else resolve(null);
+      };
+      poll();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const promptText = await uiView.webContents.executeJavaScript("document.getElementById('modal-root').innerText", true);
+    record('signin-prompt', JSON.stringify({ asked: !!requestId, text: String(promptText).slice(0, 220) }));
+    if (!requestId) throw new Error('a sign-in redirect to another host raised no permission card');
+    if (!/Allow localhost\?/.test(String(promptText))) throw new Error('the permission card did not name the host');
+
+    await uiView.webContents.executeJavaScript("document.querySelector('#host-allow').click(); true", true);
+    const landedDeadline = Date.now() + 8000;
+    while (Date.now() < landedDeadline && !String(spaceViews.get(id)?.webContents.getURL() || '').endsWith('/after')) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const landed = String(spaceViews.get(id)?.webContents.getURL() || '');
+    const granted = spaces.accountFor(state, id);
+    record('signin-granted', JSON.stringify({ landed, extraHosts: granted?.extraHosts, allowed: granted ? spaces.pageAllowed(granted, `http://localhost:${port}/after`) : false }));
+    if (!landed.endsWith('/after')) throw new Error('the held sign-in page never resumed');
+    if (!granted || !granted.extraHosts.includes('localhost')) throw new Error('the granted host was not stored on the space');
+
+    // Delete is the irreversible twin of Hide: the entry, its pane and its partition all go away.
+    const removal = await uiView.webContents.executeJavaScript(`window.bop.deleteSpace('${id}')`, true);
+    record('delete-space', JSON.stringify({ removal, gone: !spaces.accountFor(state, id), pane: spaceViews.has(id) }));
+    if (!removal || !removal.ok || spaces.accountFor(state, id) || spaceViews.has(id)) throw new Error('delete did not remove the space and its pane');
+  } finally {
+    signInHost.closeAllConnections();
+    await new Promise((resolve) => signInHost.close(resolve));
+  }
 
   // 5. The bubble keeps the spot it was dropped in, and the space menu is centred on the display.
   //    Both are measured here on the real work area at the configured size: a free drop must survive
@@ -2114,6 +3159,30 @@ async function smokeRun() {
     const openedPane = await spaceView(watchId).webContents.executeJavaScript('({ state: document.visibilityState })', true);
     record('open-pane-visible', JSON.stringify(openedPane));
     if (openedPane.state !== 'visible') throw new Error(`the open pane reports ${openedPane.state}`);
+
+    // The minimized window, driven through the app's own API rather than a guess at a Win32 call.
+    //
+    // A minimized window has no content rectangle — Windows reports the taskbar icon's own bounds
+    // (measured on a hub the user had minimized: `160x28` at `-32000,-32000`), and a pane laid out from
+    // that rectangle is a one-pixel sliver that paints nothing. That is the blank pane a user meets after
+    // restoring a hub they had minimized, or after clicking the tray icon on a hub Windows had minimized
+    // for them: `show()` alone does not un-minimize a window. So there are two assertions here — the hub
+    // comes back at all, and the pane it comes back with is the pane the user left, at the same size.
+    const paneSize = () => spaceView(watchId).webContents.executeJavaScript('({ width: window.innerWidth, height: window.innerHeight })', true);
+    const paneBeforeMinimize = await paneSize();
+    shellWindow.minimize();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const minimizedWindow = { minimized: shellWindow.isMinimized(), bounds: shellWindow.getBounds() };
+    const paneWhileMinimized = await paneSize();
+    showDashboard(watchId);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const paneAfterRestore = await paneSize();
+    record('hub-minimize-restore', JSON.stringify({ minimized: minimizedWindow, paneBeforeMinimize, paneWhileMinimized, paneAfterRestore, restored: { minimized: shellWindow.isMinimized(), visible: shellWindow.isVisible() } }));
+    if (!minimizedWindow.minimized) throw new Error('the smoke could not minimize the hub, so the restore path was not exercised');
+    if (shellWindow.isMinimized() || !shellWindow.isVisible()) throw new Error('the hub stayed minimized after the tray action that is meant to bring it back');
+    if (paneAfterRestore.width !== paneBeforeMinimize.width || paneAfterRestore.height !== paneBeforeMinimize.height) {
+      throw new Error(`the open pane changed size across minimize and restore: ${paneBeforeMinimize.width}x${paneBeforeMinimize.height} → ${paneAfterRestore.width}x${paneAfterRestore.height}`);
+    }
     fs.writeFileSync(path.join(SMOKE_OUT, 'dashboard-open.png'), (await uiView.webContents.capturePage()).toPNG());
     fs.writeFileSync(path.join(SMOKE_OUT, 'space-page.png'), (await spaceView(watchId).webContents.capturePage()).toPNG());
     // Start the bubble the way the app does: the setting first, then the window, so the dashboard
@@ -2456,8 +3525,33 @@ async function smokeRun() {
   process.stdout.write(`SMOKE OK ${JSON.stringify(steps)}\n`);
 }
 
+/**
+ * Sweeps the copies earlier portable launches left in %TEMP% (see portable-janitor.js).
+ *
+ * Twice, because both are needed: once at launch, and then every few hours, because Bop is normally started
+ * at sign-in and left running for days — a copy another launch leaves behind hours later would otherwise
+ * wait until the next sign-in, which on a laptop that never signs out is the same as never.
+ */
+function startPortableJanitor() {
+  if (!process.env.PORTABLE_EXECUTABLE_FILE || SMOKE || LIVE_CHECK) return;
+  const sweep = () => portableJanitor
+    .sweepStaleCopies({ tempDir: app.getPath('temp'), exePath: process.execPath })
+    .catch(() => {});
+  sweep();
+  const timer = setInterval(sweep, JANITOR_SWEEP_MS);
+  // A cleaner must never be the reason the process stays alive after the user quit.
+  if (typeof timer.unref === 'function') timer.unref();
+}
+
 if (singleInstance) app.whenReady().then(async () => {
+  startPortableJanitor();
+  if (!SMOKE && !LIVE_CHECK) restTimer = setInterval(restTick, REST_TICK_MS);
   state = loadSettings();
+  scheduleCacheBudgetCheck(5_000);
+  if (!SMOKE && !LIVE_CHECK) {
+    cacheTimer = setInterval(() => { void enforceCacheBudget(); }, 15 * 60 * 1000);
+    if (typeof cacheTimer.unref === 'function') cacheTimer.unref();
+  }
   if (!SMOKE && !LIVE_CHECK) applyAutoStart(); // Verification must never change this machine's startup registration.
   registerIpc();
   // The operating system's light/dark switch is a live setting, so every window has to be told when it
@@ -2468,11 +3562,12 @@ if (singleInstance) app.whenReady().then(async () => {
   createShellWindow();
   if (state.bubble) createBubble();
   createTray();
-  if (!SMOKE || LIVE_CHECK) for (const id of state.loadedSlots) loadSpaceInBackground(id);
+  if (!SMOKE || LIVE_CHECK) restoreRememberedSpaces();
 
   if (SMOKE) {
     try {
-      if (MONITOR_SMOKE) await require('./monitor-smoke.js')({
+      if (MONITOR_SMOKE || RETRY_SMOKE) {
+        const monitorApi = {
         app, shellWindow, uiView, spaceViews, monitors, retryTimers, SMOKE_OUT,
         configure: (id, url) => {
           state = spaces.enableSlot(state, id, { appId: 'custom', kind: 'social' });
@@ -2481,11 +3576,30 @@ if (singleInstance) app.whenReady().then(async () => {
           broadcast();
         },
         openSpace, closeSpace, stopSpace, loadSpaceInBackground, snapshot, saveSettings, loadSettings,
+        // Persistence surface, so the run can prove *cost* as well as behaviour: how big each store is and
+        // how many bytes an ordinary background event writes. No note text or image ever leaves the app.
+        persistence: {
+          settingsPath: () => settingsPath(),
+          notesStorePath: () => notesStorePath(),
+          stats: () => ({ ...persistenceStats }),
+          seedNotes: (count) => {
+            const image = Buffer.alloc(200_000, 7).toString('base64');
+            const notes = Array.from({ length: count }, (_value, index) => ({
+              id: `seed-note-${index}`, text: `Seeded note ${index}`, image, mime: 'image/jpeg',
+              sender: 'Desktop', timestamp: Date.now() + index, deletedAt: 0,
+            }));
+            state = { ...state, notes: notesSync.mergeNotes(state.notes, notes) };
+            broadcast();
+            return state.notes.length;
+          },
+        },
         notificationAttempts: () => notificationAttempts,
         notificationDiagnostics: () => ({ ...notificationDiagnostics }),
         mute: value => { state = { ...state, messageSound: !value }; },
-      });
-      else await smokeRun();
+        };
+        if (MONITOR_SMOKE) await require('./monitor-smoke.js')(monitorApi);
+        else await require('./retry-smoke.js')(monitorApi);
+      } else await smokeRun();
       app.exit(0);
     } catch (failure) {
       fs.mkdirSync(SMOKE_OUT, { recursive: true });
@@ -2506,5 +3620,11 @@ if (singleInstance) app.whenReady().then(async () => {
   app.on('activate', () => { if (!shellWindow) createShellWindow(); });
 });
 
-app.on('before-quit', () => { app.isQuitting = true; if (notesServer) void notesServer.close(); if (state) saveSettings(); });
+app.on('before-quit', () => {
+  app.isQuitting = true;
+  clearInterval(cacheTimer);
+  clearTimeout(cacheCheckTimer);
+  if (notesServer) void notesServer.close();
+  if (state) saveSettings();
+});
 app.on('window-all-closed', () => { if (!SMOKE) app.quit(); });
