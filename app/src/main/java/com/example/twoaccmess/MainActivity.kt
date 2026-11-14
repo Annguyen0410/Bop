@@ -67,6 +67,10 @@ open class MainActivity : ComponentActivity() {
         nativeTools = savedInstanceState?.getBoolean(NATIVE_TOOLS_EXTRA) ?: intent.getBooleanExtra(NATIVE_TOOLS_EXTRA, false)
         setContent {
             val state by HubRepository.state.collectAsState()
+            // A cold start reaches onResume before the encrypted store has finished loading, and
+            // HubNotifications.restore refuses to act on the default state. Run it once the real state
+            // is there, so cards owed to the user survive the restart.
+            LaunchedEffect(state.ready) { if (state.ready) HubNotifications.restore(this@MainActivity, state) }
             TwoAccMessTheme(darkTheme = ThemeChoice.dark(this, state.themeChoice), dynamicColor = false) {
                 HubScreen(this, state, selected, { selected = it }, refreshVersion, { refreshVersion++ }, nativeTools, { nativeTools = it })
             }
@@ -80,6 +84,10 @@ open class MainActivity : ComponentActivity() {
             HubRepository.disconnected(); HubNotificationListener.invalidateAll(); HubNotifications.clear(this)
         }
         if (HubRepository.isLocked(this)) HubRepository.clearPreviews()
+        // The user may have just granted POST_NOTIFICATIONS in system settings, or the shade may have
+        // dropped cards. Nothing broadcasts that, so returning to the hub is the moment to put back any
+        // card that is still owed, silently (see HubNotifications.restore).
+        HubNotifications.restore(this, HubRepository.state.value)
     }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
@@ -177,6 +185,59 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
     var profileSupport by remember(refreshVersion) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(refreshVersion) { profileSupport = withContext(Dispatchers.IO) { SpaceSessions.supported() } }
     fun feedback(text: String?) { text?.let { Toast.makeText(activity, it, Toast.LENGTH_LONG).show() } }
+    // One tap from the AI card: allocate a fresh slot, bind the chosen assistant, then open its sign-in
+    // page. Because every slot has its own WebView profile, doing this twice for ChatGPT gives two
+    // independent accounts rather than replacing the first one.
+    fun createSpace(app: HubApp) {
+        val id = HubReducer.nextFree(HubRepository.state.value)
+        when {
+            id == null -> feedback("Couldn't allocate a new space.")
+            !id.legacy && profileSupport != true ->
+                feedback("Update Android System WebView or Chrome before adding more spaces. Existing spaces are unchanged.")
+            else -> {
+                HubRepository.addSlot(id)
+                HubRepository.selectApp(id, app.id)
+                filter = null; query = ""; refresh()
+                feedback(MessengerWeb.open(activity, id, app))
+            }
+        }
+    }
+    /**
+     * Puts text on the clipboard and opens the first Messenger space's web session, which goes straight to the
+     * conversation that space was last in — see [MessengerThread]. Nothing is sent for the user: the text is
+     * theirs to paste, because Bop does not type into another account's chat on their behalf.
+     */
+    fun sendToMessenger(text: String) {
+        val body = text.trim().take(4000)
+        if (body.isEmpty()) return
+        try {
+            activity.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Bop note", body))
+        } catch (_: Exception) { feedback("Couldn't copy the text. Select it and copy it manually."); return }
+        val slot = state.slots.firstOrNull { state.account(it).appId == HubApps.MESSENGER_ID } ?: state.slots.firstOrNull()
+        if (slot == null) { feedback("Copied. Add a Messenger space to open the chat here."); return }
+        val account = state.account(slot)
+        if (account.appId != HubApps.MESSENGER_ID) { feedback("Copied. This phone has no Messenger space; open the chat yourself."); return }
+        feedback("Copied. Paste it into the chat that opens.")
+        val failure = MessengerWeb.open(activity, slot, account.app)
+        feedback(failure)
+    }
+
+    /**
+     * Opens the chat a card is about, and falls back to the space's own web session.
+     *
+     * Not every card is backed by a notification action that is still alive: a space that badged off its own
+     * tab title never had one, and a notification the phone has since dismissed loses it. The space itself is
+     * still the right place to land, and its web session opens at the conversation that space was last in, so
+     * the fallback is a chat rather than an inbox.
+     */
+    fun openAlertOrWebSpace(key: AlertKey) {
+        val failure = HubPlatform.openAlert(activity, key)
+        if (failure == null) return
+        val account = state.accounts.firstOrNull { it.accountId == key.accountId }
+        if (account == null) { feedback(failure); return }
+        feedback(failure)
+        feedback(MessengerWeb.open(activity, key.accountId, account.app))
+    }
     fun settings(intent: Intent) { if (!HubPlatform.openSettings(activity, intent)) feedback("This setting is unavailable on your phone.") }
     fun refreshBubble() {
         if (!state.overlayRunning) return
@@ -269,6 +330,30 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
                         }
                     }
                     item {
+                        SettingsCard("Mail accounts") {
+                            Text("One space is one mailbox. Add Gmail twice and sign in with a different Google account in each; every space keeps its own cookies, so two mailboxes never share a session. The provider owns its sign-in and may refuse an embedded browser — Open outside Bop is the fallback. Mark a mailbox VIP in its ⋯ menu and the floating bubble's badge turns red with white digits while that mailbox has waiting chats.", style = MaterialTheme.typography.bodySmall)
+                            HubApps.mail().chunked(3).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    row.forEach { app ->
+                                        OutlinedButton(onClick = { createSpace(app) },
+                                            modifier = Modifier.weight(1f).testTag("add-mail-${app.id}")) { Text(app.label) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        SettingsCard("AI accounts") {
+                            Text("One space is one login. Add ChatGPT, Claude or Gemini twice and sign in with a different account in each; open either space to switch. Every space keeps its own cookies, so the two accounts never overwrite each other.", style = MaterialTheme.typography.bodySmall)
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                HubApps.ai().forEach { app ->
+                                    OutlinedButton(onClick = { createSpace(app) },
+                                        modifier = Modifier.weight(1f).testTag("add-ai-${app.id}")) { Text(app.label) }
+                                }
+                            }
+                        }
+                    }
+                    item {
                         OutlinedTextField(query, { query = it }, modifier = Modifier.fillMaxWidth().testTag("space-search"),
                             placeholder = { Text("Find a space or an app") }, leadingIcon = { Text("⌕", fontSize = 25.sp) },
                             trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("Clear") } },
@@ -290,10 +375,12 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
                         BoxWithConstraints(Modifier.fillMaxWidth()) {
                             if (maxWidth < 320.dp) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 row.forEach { account -> SpaceCard(activity, account, state.pending(account.accountId), refreshVersion, Modifier.fillMaxWidth(),
-                                    { feedback(MessengerWeb.open(activity, account.accountId, account.app)) }, { menu = account.accountId }) }
+                                    { feedback(MessengerWeb.open(activity, account.accountId, account.app)) }, { menu = account.accountId },
+                                    if (account.accountId != AccountId.A && account.accountId != AccountId.B) ({ removing = account.accountId }) else null) }
                             } else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 row.forEach { account -> SpaceCard(activity, account, state.pending(account.accountId), refreshVersion, Modifier.weight(1f),
-                                    { feedback(MessengerWeb.open(activity, account.accountId, account.app)) }, { menu = account.accountId }) }
+                                    { feedback(MessengerWeb.open(activity, account.accountId, account.app)) }, { menu = account.accountId },
+                                    if (account.accountId != AccountId.A && account.accountId != AccountId.B) ({ removing = account.accountId }) else null) }
                                 if (row.size == 1) Spacer(Modifier.weight(1f))
                             }
                         }
@@ -318,7 +405,7 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
                     val current = detail?.let { state.alerts[it] }
                     if (current != null) item {
                         ConversationCard(current, state.account(current.key.accountId), { detail = null },
-                            { feedback(HubPlatform.openAlert(activity, current.key)) }, { HubRepository.acknowledge(current.conversation) })
+                            { openAlertOrWebSpace(current.key) }, { HubRepository.acknowledge(current.conversation) })
                     } else {
                         val alerts = state.slots.filter { selected == null || it == selected }.flatMap { state.conversations(it) }.sortedByDescending { it.postedAt }
                         if (alerts.isEmpty()) item { EmptyCard("You're all caught up", if (state.connected) "No observed alerts. Muted chats may not appear here." else "Connect notification access to get started.") }
@@ -355,6 +442,7 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
                                 Button(onClick = { if (noteDraft.isNotBlank()) { HubRepository.saveLinkedNotes(listOf(LinkedNotes.create(noteDraft))); noteDraft = ""; syncNotes() } }, modifier = Modifier.weight(1f), enabled = noteDraft.isNotBlank()) { Text("Save note") }
                                 OutlinedButton(onClick = { imagePicker.launch("image/*") }, modifier = Modifier.weight(1f)) { Text("＋ Image") }
                             }
+                            OutlinedButton(onClick = { sendToMessenger(noteDraft) }, modifier = Modifier.fillMaxWidth().testTag("note-draft-messenger"), enabled = noteDraft.isNotBlank()) { Text("Send to Messenger") }
                         }
                     }
                     val visibleNotes = linkedNotes.filter { it.deletedAt <= 0 }
@@ -363,10 +451,13 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
                         SettingsCard(note.sender + " · " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(note.timestamp))) {
                             if (note.text.isNotBlank()) Text(note.text)
                             if (note.image.isNotBlank()) LinkedNotes.decodeImage(note.image)?.let { bitmap -> Image(bitmap.asImageBitmap(), "Attached note image", Modifier.fillMaxWidth().heightIn(max = 320.dp).clip(RoundedCornerShape(18.dp)), contentScale = ContentScale.Fit) }
-                            TextButton(onClick = {
-                                HubRepository.saveLinkedNotes(linkedNotes + LinkedNotes.tombstone(note))
-                                syncNotes()
-                            }) { Text("Delete on both devices") }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (note.text.isNotBlank()) TextButton(onClick = { sendToMessenger(note.text) }, modifier = Modifier.testTag("note-${note.id}-messenger")) { Text("Send to Messenger") }
+                                TextButton(onClick = {
+                                    HubRepository.saveLinkedNotes(linkedNotes + LinkedNotes.tombstone(note))
+                                    syncNotes()
+                                }) { Text("Delete on both devices") }
+                            }
                         }
                     }
                     item { OutlinedButton(onClick = { syncNotes() }, modifier = Modifier.fillMaxWidth()) { Text("Sync now") } }
@@ -481,10 +572,10 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
     if (adding || appPicker != null) AppPicker(
         title = if (adding) "A new little space" else "Choose an app", dismiss = { adding = false; appPicker = null },
         choose = { app ->
-            val id = if (adding) HubReducer.nextFree(HubRepository.state.value) else appPicker
-            if (id == null) feedback("Couldn't allocate a new space.")
-            else if (!id.legacy && profileSupport != true) feedback("Update Android System WebView or Chrome before adding more spaces. Existing spaces are unchanged.")
-            else { if (adding) HubRepository.addSlot(id); HubRepository.selectApp(id, app.id); filter = null; query = ""; refresh() }
+            if (adding) createSpace(app) else appPicker?.let { id ->
+                HubRepository.selectApp(id, app.id)
+                filter = null; query = ""; refresh()
+            }
             adding = false; appPicker = null
         })
     menu?.let { id ->
@@ -493,10 +584,13 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
             Column {
                 Text("${account.app.label} · space ${id.name}", style = MaterialTheme.typography.bodySmall)
                 MenuAction("Rename", "rename-${id.name}") { menu = null; renaming = id }
+                MenuAction(if (account.vip) "Remove VIP" else "Mark as VIP (red bubble badge)", "vip-${id.name}") {
+                    HubRepository.setVip(id, !account.vip); refreshBubble(); refresh(); menu = null
+                }
                 MenuAction("Change app", "app-pick-${id.name}") { menu = null; appPicker = id }
                 MenuAction("Choose picture", "avatar-pick-${id.name}") { menu = null; pickAvatar(AvatarPolicy.slot(id)) }
                 MenuAction("Reset picture", "avatar-clear-${id.name}") { AvatarStore.clear(activity, AvatarPolicy.slot(id)); refreshBubble(); refresh(); menu = null }
-                if (id != AccountId.A && id != AccountId.B) MenuAction("Remove space", "slot-remove-${id.name}") { menu = null; removing = id }
+                if (id != AccountId.A && id != AccountId.B) MenuAction("Delete space", "slot-remove-${id.name}") { menu = null; removing = id }
             }
         }, confirmButton = { TextButton(onClick = { menu = null }) { Text("Done") } })
     }
@@ -507,10 +601,26 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
             confirmButton = { TextButton(onClick = { HubRepository.rename(id, label); refreshBubble(); renaming = null }) { Text("Save") } },
             dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } })
     }
-    removing?.let { id -> AlertDialog(onDismissRequest = { removing = null }, title = { Text("Remove ${state.account(id).label}?") },
-        text = { Text("This hides the space and clears its hub alerts. Its local login and picture stay on this phone; clear the session from its browser first if you want to log out.") },
-        confirmButton = { TextButton(onClick = { HubRepository.removeSlot(id); if (selected == id) select(null); filter = null; removing = null; refreshBubble() }) { Text("Remove") } },
-        dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } }) }
+    removing?.let { id ->
+        val account = state.account(id)
+        fun forget(clearLogin: Boolean) {
+            if (clearLogin) feedback(MessengerWeb.clear(activity, id, account.app))
+            HubRepository.deleteSlot(activity, id)
+            if (selected == id) select(null)
+            filter = null
+            removing = null
+            refreshBubble()
+        }
+        AlertDialog(onDismissRequest = { removing = null }, title = { Text("Delete ${account.label}?") },
+            text = {
+                Column {
+                    Text("This removes the space, its alerts and its picture from Bop. Choose the first button to also erase this space's website login, cookies and cache.")
+                    TextButton(onClick = { forget(clearLogin = false) }, modifier = Modifier.testTag("slot-delete-keep-login")) { Text("Delete but keep the website login") }
+                }
+            },
+            confirmButton = { TextButton(onClick = { forget(clearLogin = true) }, modifier = Modifier.testTag("slot-delete-clear-login")) { Text("Delete + clear login") } },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text("Keep") } })
+    }
     binding?.let { id -> BindingDialog(state.account(id), state.accounts, environments, { binding = null }) { serial, label ->
         if (HubRepository.bind(id, serial, label)) { binding = null; HubNotificationListener.refresh() } else feedback("That installation is already linked to another space.")
     } }
@@ -522,14 +632,15 @@ private fun HubScreen(activity: MainActivity, state: HubState, selected: Account
 
 private object GuideContent {
     val sections = listOf(
-        "01 / Your spaces" to "Each space keeps its own website login. Add a space, choose an app, then sign in on its official HTTPS page. Rename it or add a picture from its ⋯ menu. A and B are your permanent starter spaces. Removing a space hides it, but keeps its local session and picture; use Options → Clear local session in its browser to log out first.",
+        "01 / Your spaces" to "Each space keeps its own website login. Add a space, choose an app, then sign in on its official HTTPS page. Rename it or add a picture from its ⋯ menu. A and B are your permanent starter spaces. Other spaces can be deleted from the card or its ⋯ menu; \"Delete + clear login\" also erases that space's cookies and cache. Deleting only the space keeps the website login in this phone's WebView storage, which is useful when you plan to add the same site again.",
         "02 / No fixed slot ceiling" to "Bop no longer imposes a 16-space limit. A–P keep their existing private processes and logins. Extra spaces use named WebView profiles with separate cookies and website storage, supported by up-to-date Android System WebView/Chrome. If your engine doesn't support this, extra spaces stay blocked rather than sharing a login. Available storage and your WebView provider still impose practical limits. All spaces share Bop's Android UID; this is not work-profile security isolation.",
         "03 / A bubble that hugs the edge" to "Allow notifications and display-over-other-apps in Settings, then start the bubble. Drag it: on release it docks flush to the nearest left or right edge. Tap to pick a space. Opening a menu or a browser never moves the bubble. It hides while the phone is locked; you can stop it in Settings or its notification.",
         "04 / What alerts really mean" to "Alerts come from this phone's own installed apps, never from background web polling. Allow notification access in Settings. Messenger requires an installation linked to a space; other supported apps need exactly one space for that app. Two spaces for the same app are ambiguous, so neither gets guessed alerts. Likes, promos and feed notifications are filtered when Android identifies their category. Notifications with an unknown category may still be shown; accuracy depends on the source app. Muted chats and already-open chats may post nothing. A web-only site cannot send background cards.",
         "05 / Read, dismiss, repeat" to "Tap an alert to see its observed excerpt; Open conversation uses the original app's notification action when still valid. Dismiss in Bop clears its badge, not the real unread status. Swiping a Bop notification acknowledges it for this process; restarting the app can observe an active source again. Bop isn't a complete inbox and can't force an app to generate a missing notification.",
         "06 / Privacy & pictures" to "No Bop server or analytics. WebView keeps cookies, cache and site key material privately on the phone. The hub does not extract credentials or scrape messages. Notification excerpts and action tokens stay in memory. Broad Android notification access is filtered to supported packages. Work previews are off by default. Screenshots and screen recording are allowed, so check for private content before sharing. Chosen pictures are square-cropped without stretching and stored only on this device.",
-        "07 / Browser basics" to "The browser always shows the page's domain. Only the selected service's allowed HTTPS origins can open. Use Options to switch desktop/mobile, pick another space or clear this local session. Attachments use Android's document picker; camera/microphone, external popups, downloads and background push aren't enabled. The service controls login, encrypted-history recovery and availability; Bop cannot bypass its restrictions.",
-        "08 / Something feels off?" to "Update Android System WebView/Chrome and check your connection. For alerts, check notification access, the source app's permissions and whether you have duplicate spaces for the app. Try Send test alerts in Settings. Session diagnostics can be copied from Settings without passwords, cookies or page URLs. Never share a password, recovery code or secure-storage PIN."
+        "07 / Browser basics" to "The browser always shows the page's domain. Only the selected service's allowed HTTPS origins can open in the space. User-opened popups use that same isolated login; HTTPS links outside the service open in your browser. Messenger's Options also launches the official Messenger app when installed. Attachments use Android's document picker; camera/microphone, downloads and background push aren't enabled. The service controls login, encrypted-history recovery and availability; Bop cannot bypass its restrictions.",
+        "08 / Something feels off?" to "Update Android System WebView/Chrome and check your connection. For alerts, check notification access, the source app's permissions and whether you have duplicate spaces for the app. Try Send test alerts in Settings. Session diagnostics can be copied from Settings without passwords, cookies or page URLs. Never share a password, recovery code or secure-storage PIN.",
+        "09 / AI accounts, side by side" to "Add ChatGPT, Claude or Gemini once per account from the AI accounts card. Each space keeps its own cookies and storage, so adding the same assistant twice lets two accounts stay signed in without overwriting each other; open the space you want to switch. AI spaces ask for the desktop site because Google, Microsoft and Apple sign-in pages reject the WebView marker. Google still controls its own sign-in and may refuse an embedded browser; Bop cannot bypass that."
     )
 }
 
@@ -568,7 +679,7 @@ private object GuideContent {
         }
     }
 }
-@Composable private fun SpaceCard(activity: MainActivity, account: AccountBinding, pending: Int, refresh: Int, modifier: Modifier, open: () -> Unit, menu: () -> Unit) {
+@Composable private fun SpaceCard(activity: MainActivity, account: AccountBinding, pending: Int, refresh: Int, modifier: Modifier, open: () -> Unit, menu: () -> Unit, delete: (() -> Unit)? = null) {
     val accent = Color(account.app.accent)
     Card(modifier, shape = RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -577,7 +688,12 @@ private object GuideContent {
                 Spacer(Modifier.weight(1f))
                 TextButton(menu, Modifier.size(48.dp).testTag("space-menu-${account.accountId.name}"), contentPadding = PaddingValues(0.dp)) { Text("⋯", fontSize = 24.sp) }
             }
-            Text(account.label, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(account.label, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                // The flag is visible on the card because it otherwise only shows up as the bubble's colour.
+                if (account.vip) Text(" ★ VIP", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelMedium, modifier = Modifier.testTag("vip-chip-${account.accountId.name}"))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(6.dp).background(accent, CircleShape))
                 Text(account.app.label, Modifier.padding(start = 6.dp).weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -585,6 +701,9 @@ private object GuideContent {
             }
             FilledTonalButton(open, Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("open-${account.accountId.name}"),
                 enabled = Build.VERSION.SDK_INT >= WebSessionPolicy.MIN_ANDROID, shape = RoundedCornerShape(16.dp)) { Text("Open  ↗") }
+            if (delete != null) TextButton(delete, Modifier.fillMaxWidth().heightIn(min = 40.dp).testTag("delete-${account.accountId.name}")) {
+                Text("Delete space", color = MaterialTheme.colorScheme.error)
+            }
         }
     }
 }
@@ -630,17 +749,29 @@ private object GuideContent {
 }
 @Composable private fun AppPicker(title: String, dismiss: () -> Unit, choose: (HubApp) -> Unit) {
     var query by remember { mutableStateOf("") }
+    val visible = HubApps.ALL.filter { it.label.contains(query, true) }
     AlertDialog(onDismissRequest = dismiss, title = { Text(title) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("Find an app") }, shape = RoundedCornerShape(18.dp))
+            if (visible.any { it.kind == HubApps.KIND_AI }) Text(
+                "One space holds one AI login. Add the same assistant twice to keep two accounts signed in side by side.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                HubApps.ALL.filter { it.label.contains(query, true) }.forEach { app ->
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth().clickable { choose(app) }.testTag("app-choice-${app.id}")) {
-                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(10.dp).background(Color(app.accent), CircleShape))
-                            Text(app.label, Modifier.weight(1f).padding(start = 12.dp), fontWeight = FontWeight.SemiBold)
-                            Text("↗")
+                listOf(HubApps.KIND_MAIL to "Mail accounts", HubApps.KIND_AI to "AI accounts",
+                    HubApps.KIND_SOCIAL to "Social accounts").forEach { (kind, heading) ->
+                    val apps = visible.filter { it.kind == kind }
+                    if (apps.isNotEmpty()) {
+                        Text(heading, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 4.dp))
+                        apps.forEach { app ->
+                            Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth().clickable { choose(app) }.testTag("app-choice-${app.id}")) {
+                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(10.dp).background(Color(app.accent), CircleShape))
+                                    Text(app.label, Modifier.weight(1f).padding(start = 12.dp), fontWeight = FontWeight.SemiBold)
+                                    Text("↗")
+                                }
+                            }
                         }
                     }
                 }

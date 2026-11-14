@@ -37,6 +37,12 @@ data class AccountBinding(
     val boundAt: Long = 0,
     /** Which catalog app this slot opens as a web session ([HubApps]). */
     val appId: String = HubApps.DEFAULT_ID,
+    /**
+     * The user marked this mailbox/account as VIP. It changes nothing about the page and nothing about
+     * which chats are counted: while this space has waiting chats the floating bubble's badge is red
+     * with white digits instead of blue with black ([VipBadge]).
+     */
+    val vip: Boolean = false,
 ) {
     val app: HubApp get() = HubApps.orDefault(appId)
 }
@@ -227,6 +233,19 @@ object HubReducer {
         )
     }
 
+    /**
+     * Marks one space VIP, or takes the mark away. Alerts are untouched on purpose: the flag is about how
+     * an arrival is *shown*, not about what arrived, so changing it must never clear a card.
+     */
+    fun setVip(state: HubState, id: AccountId, vip: Boolean): HubState {
+        if (id !in state.slots) return state
+        val current = state.accounts.firstOrNull { it.accountId == id } ?: return state
+        if (current.vip == vip) return state
+        return state.copy(accounts = state.accounts.map {
+            if (it.accountId == id) it.copy(vip = vip) else it
+        })
+    }
+
     fun selectApp(state: HubState, id: AccountId, appId: String): HubState {
         val app = HubApps.byId(appId) ?: return state
         if (state.accounts.none { it.accountId == id } || state.account(id).appId == app.id) return state
@@ -237,6 +256,20 @@ object HubReducer {
         )
     }
 
-    fun disconnect(state: HubState) = state.copy(connected = false,
-        alerts = state.alerts.filterKeys { WebUnread.isSource(it.sourceKey) })
+    /**
+     * The listener came back. Nothing else changes — see [HubRepository.connected] for why clearing here
+     * was the defect.
+     */
+    fun connect(state: HubState) = state.copy(connected = true)
+
+    /**
+     * The listener is gone. Only the connection flag changes.
+     *
+     * Dropping the observed alerts here looked tidy but cost the user two things: a web-session alert that
+     * does not depend on the listener was thrown away with them, and the acknowledgement on every dismissed
+     * card was lost, so a reconnect re-posted notifications the user had already swiped away. No card is
+     * drawn while disconnected ([HubNotifications.sync] requires a connected source); the alerts are
+     * reconciled against the live notification set when the listener comes back.
+     */
+    fun disconnect(state: HubState) = state.copy(connected = false)
 }

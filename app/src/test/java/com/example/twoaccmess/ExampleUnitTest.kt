@@ -156,6 +156,22 @@ class ExampleUnitTest {
         assertEquals("Instagram", HubReducer.selectApp(switched, AccountId.B, "instagram").account(AccountId.B).app.label)
     }
 
+    @Test fun twoSpacesCanHoldTwoAccountsOfTheSameAiService() {
+        // ChatGPT, Claude and Gemini are catalog apps like any other, so the same app may sit in two
+        // spaces. Each slot still has its own WebView directory, which is what keeps the two logins
+        // apart; nothing in the reducer collapses them into one account.
+        var state = HubReducer.enableSlot(connected(), AccountId.C)
+        state = HubReducer.selectApp(state, AccountId.A, "chatgpt")
+        state = HubReducer.selectApp(state, AccountId.C, "chatgpt")
+        assertEquals("chatgpt", state.account(AccountId.A).appId)
+        assertEquals("chatgpt", state.account(AccountId.C).appId)
+        assertEquals(2, state.accounts.count { it.appId == "chatgpt" })
+        assertNotEquals(WebSessionPolicy.dataSuffix(AccountId.A), WebSessionPolicy.dataSuffix(AccountId.C))
+        // The AI entries have no phone package, so they never steal a native notification card.
+        assertNull(HubReducer.resolve(state, "com.openai.chatgpt", 0))
+        assertNull(HubReducer.resolve(state, "com.anthropic.claude", 0))
+    }
+
     @Test fun webSlotsAreClaimedByTheirAppChoiceAndAmbiguityFailsClosed() {
         // Messenger keeps its 1.4 rule: with no bound installation anywhere, a web login claims nothing.
         assertNull(HubReducer.resolve(HubState(ready = true, disclosureAccepted = true, connected = true), MESSENGER_PACKAGE, 0))
@@ -235,7 +251,10 @@ class ExampleUnitTest {
         assertEquals(connected(), HubReducer.upsert(connected(), invalid))
         val disconnected = HubReducer.disconnect(HubReducer.upsert(connected(), alert(AccountId.A)))
         assertFalse(disconnected.connected)
-        assertTrue(disconnected.alerts.isEmpty())
+        // A disconnect stops ingestion but no longer erases what was already observed: the card is not drawn
+        // while the source is gone, and keeping the alert is what lets a dismissal survive the reconnect
+        // instead of a swiped card coming back. See HubReducer.disconnect and HubReducerTest.
+        assertEquals(1, disconnected.alerts.size)
         assertEquals(disconnected, HubReducer.upsert(disconnected, alert(AccountId.A)))
     }
 

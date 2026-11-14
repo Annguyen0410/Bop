@@ -46,6 +46,16 @@ class HubApplication : Application() {
             HubRepository.initialize(this)
         }
     }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) AvatarStore.trimMemory()
+    }
+
+    override fun onLowMemory() {
+        super.onLowMemory()
+        AvatarStore.trimMemory()
+    }
 }
 
 object HubRepository {
@@ -210,6 +220,18 @@ object HubRepository {
         return true
     }
 
+    /**
+     * Deletes an extra space instead of merely hiding it: the slot entry, its alerts, its picture and
+     * its per-space browser preferences go away. The website's own cookies are erased separately by
+     * [MessengerWeb.clear], because only that slot's WebView process owns them.
+     */
+    fun deleteSlot(context: Context, id: AccountId): Boolean {
+        if (!removeSlot(id)) return false
+        try { AvatarStore.clear(context, AvatarPolicy.slot(id)) } catch (_: Exception) { /* picture is cosmetic */ }
+        try { context.deleteSharedPreferences("web-space-${id.name}") } catch (_: Exception) { /* preferences are optional */ }
+        return true
+    }
+
     fun rename(id: AccountId, label: String) {
         if (!state.value.ready) return
         mutate { HubReducer.rename(it, id, label) }
@@ -219,6 +241,16 @@ object HubRepository {
     fun selectApp(id: AccountId, appId: String) {
         if (!state.value.ready) return
         mutate { HubReducer.selectApp(it, id, appId) }
+        save()
+    }
+
+    /**
+     * Marks a space VIP (or takes the mark away). Saved with the other settings so the red badge is still
+     * red after a reboot, and pushed to the overlay so the change is visible without reopening the hub.
+     */
+    fun setVip(id: AccountId, vip: Boolean) {
+        if (!state.value.ready || id !in state.value.slots) return
+        mutate { HubReducer.setVip(it, id, vip) }
         save()
     }
 
@@ -239,7 +271,18 @@ object HubRepository {
         HubNotificationListener.invalidateAll()
         save()
     }
-    fun connected() { mutate { it.copy(connected = true, alerts = emptyMap()) } }
+    /**
+     * The phone's notification listener reconnected. It must not touch [HubState.alerts].
+     *
+     * It used to clear them here, and Android drops this listener often (an update, a revoked and regranted
+     * access, a memory reclaim). Two things went wrong each time: the open web session's own alert — which
+     * needs no notification access at all — was erased with the rest, so a slot that was showing "1 unread"
+     * went silent until its page happened to report a different count; and every dismissal was forgotten, so
+     * cards the user had already swiped came back. Reconciliation on connect (`retainSources`) is what
+     * removes alerts whose source notification is really gone, and `upsert` keeps a dismissal for content
+     * that did not change. Both need the old state to still be there.
+     */
+    fun connected() { mutate { HubReducer.connect(it) } }
     fun disconnected() { mutate { HubReducer.disconnect(it) } }
     fun clearPreviews() { mutate { it.copy(alerts = emptyMap()) }; HubNotificationListener.invalidateAll() }
     fun remove(sourceKey: String) { mutate { HubReducer.remove(it, sourceKey) } }
@@ -319,7 +362,9 @@ private class EncryptedSettings(context: Context) {
                 if (value.isNull("serial")) null else value.optLong("serial", -1L).takeIf { it >= 0 },
                 value.optLong("generation"), value.optLong("boundAt", 0L),
                 // An unknown or missing id falls back to Messenger instead of hiding the slot.
-                HubApps.orDefault(value.optString("app").takeIf { it.isNotBlank() }).id)
+                HubApps.orDefault(value.optString("app").takeIf { it.isNotBlank() }).id,
+                // A settings file written before the VIP flag existed restores as an ordinary space.
+                value.optBoolean("vip", false))
         }
         require(bindings.mapNotNull { it.profileSerial }.distinct().size == bindings.count { it.profileSerial != null })
         require(bindings.all { it.profileSerial == null || it.profileSerial >= 0 })
@@ -349,7 +394,7 @@ private class EncryptedSettings(context: Context) {
                 state.accounts.forEach { account -> put(JSONObject().put("id", account.accountId.name)
                     .put("label", account.label).put("serial", account.profileSerial ?: JSONObject.NULL)
                     .put("generation", account.generation).put("boundAt", account.boundAt)
-                    .put("app", account.appId)) }
+                    .put("app", account.appId).put("vip", account.vip)) }
             })
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())

@@ -161,6 +161,9 @@ class FloatingHubService : Service() {
         handle.removeAllViews()
         val palette = HubPalette.of(HubThemeStore.dark(this))
         val total = state.slots.sumOf { state.pending(it) }
+        // Decided once, here: a single waiting chat in a space the user marked VIP turns the whole badge
+        // red, because the badge has one colour and a VIP arrival must not hide behind a blue disc.
+        val vipWaiting = VipBadge.vipWaiting(state)
         val loudest = state.slots.firstOrNull { state.pending(it) > 0 }
         handle.contentDescription = resources.getQuantityString(R.plurals.bubble_content_description, total, total)
         handle.elevation = dp(8).toFloat()
@@ -189,10 +192,12 @@ class FloatingHubService : Service() {
             }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }
         AccountAlerts.badge(total)?.let { label ->
+            // Blue disc with black digits normally; red disc with white digits while a VIP space waits.
+            val badgeStyle = VipBadge.style(total, vipWaiting)
             handle.addView(TextView(this).apply {
-                text = label; setTextColor(palette.badgeText); textSize = 10f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+                text = label; setTextColor(badgeStyle.text); textSize = 10f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
                 background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL; setColor(palette.badge); setStroke(dp(1), Color.WHITE)
+                    shape = GradientDrawable.OVAL; setColor(badgeStyle.background); setStroke(dp(1), Color.WHITE)
                 }
                 contentDescription = null
             }, FrameLayout.LayoutParams(dp(19), dp(19), Gravity.TOP or Gravity.END))

@@ -148,6 +148,12 @@ object AvatarStore {
         cache.remove(slot)
     }
 
+    /** Drop only decoded bitmap references under memory pressure; the user's image files stay intact. */
+    @Synchronized
+    fun trimMemory() {
+        cache.clear()
+    }
+
     private fun decode(context: Context, uri: Uri): Bitmap? = if (Build.VERSION.SDK_INT >= 28) {
         // ImageDecoder applies the camera's orientation tag for us.
         ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->

@@ -73,7 +73,25 @@ object HubNotifications {
     }
 
     @Synchronized
-    fun sync(context: Context, state: HubState) {
+    fun sync(context: Context, state: HubState) = syncInternal(context, state, restore = false)
+
+    /**
+     * Re-posts any card the shade no longer holds, without a sound. Android drops this app's cards when
+     * the user revokes POST_NOTIFICATIONS, clears all notifications or an OEM tidies the shade, and no
+     * callback tells the app that happened. Until this existed, re-granting the permission left an
+     * alert that was still in the hub invisible outside it until a *new* message arrived.
+     *
+     * Only called when the user is back in the hub, so the one case this could resurrect — a swipe whose
+     * acknowledgement broadcast has not landed yet — is a window of milliseconds rather than a loop.
+     */
+    @Synchronized
+    fun restore(context: Context, state: HubState) = syncInternal(context, state, restore = true)
+
+    private fun syncInternal(context: Context, state: HubState, restore: Boolean) {
+        // Before the encrypted store has loaded, `state` is the default (A and B only) and has no alerts.
+        // Syncing then would delete every added slot's channel — and with it the user's mute choice —
+        // on every cold start. There is nothing to post yet, so wait for the real state.
+        if (!state.ready) return
         createChannels(context, state.slots)
         val manager = context.getSystemService(NotificationManager::class.java)
         // A web-session alert comes from this app's own open page ([WebUnread]), so it needs no
@@ -84,11 +102,12 @@ object HubNotifications {
             (state.connected || webSlots.isNotEmpty())
         state.accounts.forEach { account ->
             val source = state.connected || account.accountId in webSlots
-            publish(context, manager, state, account.accountId, allowed && source && account.accountId in state.slots)
+            publish(context, manager, state, account.accountId, allowed && source && account.accountId in state.slots, restore)
         }
     }
 
-    private fun publish(context: Context, manager: NotificationManager, state: HubState, id: AccountId, allowed: Boolean) {
+    private fun publish(context: Context, manager: NotificationManager, state: HubState, id: AccountId, allowed: Boolean,
+                        restore: Boolean = false) {
         val pending = if (allowed) state.conversations(id).filter { !it.acknowledged } else emptyList()
         if (pending.isEmpty()) {
             posted.remove(id)
@@ -99,7 +118,12 @@ object HubNotifications {
         val account = state.account(id)
         // One atomic step: two threads syncing at once must not both decide this content is new.
         val content = signature(pending, account)
-        if (posted.put(id, content) == content) return
+        val previousContent = posted.put(id, content)
+        // Unchanged content is normally left alone: that is what stops a dismissed card from coming back.
+        // On the restore path only, a card Android removed (revoked permission, cleared shade) is posted
+        // again, silently, because it is news the user already received.
+        val rePosting = previousContent == content
+        if (rePosting && (!restore || active(manager, tag(id)).any { it.id == cardId(id) })) return
         // A lower unread marker is a state update, not a new sound. Let Android channels/DND control
         // real arrivals; never use Ringtone playback that bypasses notification permission/mute.
         val web = pending.filter { WebUnread.isSource(it.key.sourceKey) }.maxOfOrNull { it.postedAt }
@@ -118,7 +142,7 @@ object HubNotifications {
         val sources = pending.map { it.key.sourceKey }
         post(context, manager, tag(id), cardId(id), NotificationCompat.Builder(context, channel(id))
             .setSmallIcon(R.drawable.ic_hub)
-            .setSilent(silentWebUpdate)
+            .setSilent(silentWebUpdate || rePosting)
             .setContentTitle(AccountAlerts.title(id, pending.size))
             .setContentText(if (pending.size == 1) line(pending.first()) else AccountAlerts.summaryText(id, account.label, pending.size))
             .setSubText("${account.app.label} · ${account.label}")

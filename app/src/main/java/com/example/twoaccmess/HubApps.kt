@@ -46,6 +46,8 @@ object HubApps {
     const val MESSENGER_ID = "messenger"
     const val KIND_SOCIAL = "social"
     const val KIND_AI = "ai"
+    /** Mailboxes. One space is one signed-in mailbox, so two Gmail accounts are two spaces. */
+    const val KIND_MAIL = "mail"
 
     val MESSENGER = HubApp(
         "messenger", "Messenger", "https://www.facebook.com/messages/", listOf("facebook.com", "messenger.com"),
@@ -116,6 +118,37 @@ object HubApps {
         "WeChat for Web links the session by scanning a QR code with WeChat on your phone. Cards need this app in exactly one slot.",
         listOf("com.tencent.mm"))
 
+    // ---- mailboxes ----------------------------------------------------------------------------
+    // A mailbox is a web page like every other space: its own cookies, its own login, its own tab
+    // title. The allow-list carries the identity hosts each provider hands the sign-in to. A provider
+    // may still refuse an embedded browser; the browser's own menu offers "Open outside Bop" for that,
+    // and the note below says so instead of promising a login that cannot happen here.
+    val GMAIL = HubApp("gmail", "Gmail", "https://mail.google.com/",
+        listOf("mail.google.com", "accounts.google.com", "myaccount.google.com"), 0xFFEA4335.toInt(),
+        "Sign in with your Google account. Google may refuse its sign-in inside an embedded browser: if the page says the browser is not secure, use Open outside Bop. Add the mailbox again for a second Google account — each space keeps its own cookies. Starts on the desktop site, because Google's phone layout is its older mobile web app. No phone app is watched, so cards come only from this page's own title.",
+        kind = KIND_MAIL, desktopSite = true)
+    val OUTLOOK = HubApp("outlook", "Outlook", "https://outlook.live.com/mail/",
+        listOf("outlook.live.com", "outlook.office.com", "outlook.office365.com", "login.microsoftonline.com",
+            "login.live.com", "account.live.com"), 0xFF0078D4.toInt(),
+        "Sign in with your Microsoft account, work or personal. Sign-in continues on Microsoft's own login hosts, which is why they are allowed in this space. Starts on the desktop site, because the phone layout is Outlook's older mobile web client.",
+        kind = KIND_MAIL, desktopSite = true)
+    val YAHOO_MAIL = HubApp("yahoomail", "Yahoo Mail", "https://mail.yahoo.com/",
+        listOf("mail.yahoo.com", "login.yahoo.com", "accounts.yahoo.com"), 0xFF6001D2.toInt(),
+        "Sign in with your Yahoo account. Two spaces can hold two Yahoo mailboxes side by side. Starts on the desktop site, because the phone layout is Yahoo's older mobile web client.",
+        kind = KIND_MAIL, desktopSite = true)
+    val ICLOUD_MAIL = HubApp("icloudmail", "iCloud Mail", "https://www.icloud.com/mail",
+        listOf("icloud.com", "appleid.apple.com"), 0xFF007AFF.toInt(),
+        "Sign in with your Apple Account. Apple sends a two-factor code to a trusted device, and its sign-in page stays on appleid.apple.com. Starts on the desktop site, because the phone layout is iCloud's older mobile web client.",
+        kind = KIND_MAIL, desktopSite = true)
+    val PROTON_MAIL = HubApp("protonmail", "Proton Mail", "https://mail.proton.me/",
+        listOf("proton.me", "protonmail.com", "account.proton.me"), 0xFF6D4AFF.toInt(),
+        "Sign in with your Proton account. Proton may ask for a second password; both stay inside this space. Starts on the desktop site, because the phone layout is Proton's older mobile web client.",
+        kind = KIND_MAIL, desktopSite = true)
+    val ZOHO_MAIL = HubApp("zohomail", "Zoho Mail", "https://mail.zoho.com/",
+        listOf("mail.zoho.com", "accounts.zoho.com"), 0xFFF0483B.toInt(),
+        "Sign in with your Zoho account, including a custom-domain mailbox hosted by Zoho. Starts on the desktop site, because the phone layout is Zoho's older mobile web client.",
+        kind = KIND_MAIL, desktopSite = true)
+
     // ---- AI accounts --------------------------------------------------------------------------
     // One space = one signed-in account. Selecting the same entry in a second space gives it a second
     // isolated WebView profile, so two accounts stay signed in side by side. These entries are web-only:
@@ -138,13 +171,18 @@ object HubApps {
         kind = KIND_AI)
 
     val ALL = listOf(MESSENGER, FACEBOOK, INSTAGRAM, WHATSAPP, TIKTOK, TELEGRAM, ZALO, X, THREADS, REDDIT,
-        DISCORD, SNAPCHAT, LINKEDIN, VIBER, SKYPE, GOOGLE_CHAT, VK, BLUESKY, WECHAT, CHATGPT, CLAUDE, GEMINI)
+        DISCORD, SNAPCHAT, LINKEDIN, VIBER, SKYPE, GOOGLE_CHAT, VK, BLUESKY, WECHAT,
+        GMAIL, OUTLOOK, YAHOO_MAIL, ICLOUD_MAIL, PROTON_MAIL, ZOHO_MAIL,
+        CHATGPT, CLAUDE, GEMINI)
     val DEFAULT = MESSENGER
 
     fun byId(id: String?): HubApp? = ALL.firstOrNull { it.id == id }
 
     /** AI assistants, in the order the picker and the quick-add card show them. */
     fun ai(): List<HubApp> = ALL.filter { it.kind == KIND_AI }
+
+    /** Mailboxes, in the order the picker and the quick-add card show them. */
+    fun mail(): List<HubApp> = ALL.filter { it.kind == KIND_MAIL }
 
     /** Stored ids are validated on read, so a stale or hand-edited id falls back to Messenger. */
     fun orDefault(id: String?): HubApp = byId(id) ?: DEFAULT

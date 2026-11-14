@@ -14,7 +14,7 @@ class HubAppsTest {
         assertEquals("https://www.facebook.com/messages/", HubApps.MESSENGER.home)
         assertEquals("https://www.facebook.com/", HubApps.FACEBOOK.home)
         assertTrue(HubApps.MESSENGER.note.contains("Facebook's messages page"))
-        assertEquals(22, HubApps.ALL.size)
+        assertEquals(28, HubApps.ALL.size)
         assertEquals(HubApps.ALL.size, HubApps.ALL.map { it.id }.distinct().size)
         assertTrue(HubApps.ALL.all { it.id == it.id.lowercase() && it.id.none { c -> c == ' ' } })
         assertEquals(HubApps.ALL.size, HubApps.ALL.map { it.label }.distinct().size)
@@ -35,8 +35,11 @@ class HubAppsTest {
         // Facebook is web-only on purpose because its notifications mix likes, comments and page posts
         // with messages. The three AI assistants are web-only too: their providers ship no phone app
         // whose notifications this build can attribute to a space.
-        assertEquals(listOf(HubApps.FACEBOOK, HubApps.CHATGPT, HubApps.CLAUDE, HubApps.GEMINI), HubApps.webOnly())
-        assertEquals(HubApps.ALL.size - 4, HubApps.observingCount())
+        // The six mailboxes are web-only as well: a mailbox raises cards from its own tab title only.
+        assertEquals(listOf(HubApps.FACEBOOK, HubApps.GMAIL, HubApps.OUTLOOK, HubApps.YAHOO_MAIL,
+            HubApps.ICLOUD_MAIL, HubApps.PROTON_MAIL, HubApps.ZOHO_MAIL,
+            HubApps.CHATGPT, HubApps.CLAUDE, HubApps.GEMINI), HubApps.webOnly())
+        assertEquals(HubApps.ALL.size - 10, HubApps.observingCount())
         assertEquals(HubApps.observingCount(), HubApps.observingLabels().split(", ").size)
         assertTrue(HubApps.observingLabels().contains("WhatsApp"))
         assertTrue(HubApps.observingLabels().contains("Discord"))
@@ -108,7 +111,10 @@ class HubAppsTest {
         // system-browser fallback.
         // The rule and its measurements are pinned in [WebSessionPolicyTest]; a new app needs a reason
         // before it is added here, not a guess.
-        assertEquals(setOf("messenger", "instagram", "tiktok", "zalo", "whatsapp"),
+        // Mailboxes are on this list for the same reason the messaging apps are: their phone build is a
+        // different, older client, so the modern web app is the desktop one.
+        assertEquals(setOf("messenger", "instagram", "tiktok", "zalo", "whatsapp",
+            "gmail", "outlook", "yahoomail", "icloudmail", "protonmail", "zohomail"),
             HubApps.ALL.filter { it.desktopSite }.map { it.id }.toSet())
         HubApps.ALL.filter { it.desktopSite }.forEach { app ->
             assertTrue(app.id, app.note.contains("desktop site"))

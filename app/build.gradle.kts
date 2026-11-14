@@ -27,8 +27,8 @@ android {
         applicationId = "com.example.twoaccmess"
         minSdk = 24
         targetSdk = 37
-        versionCode = 9
-        versionName = "2.0-bop"
+        versionCode = 11
+        versionName = "2.1.1-bop"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

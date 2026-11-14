@@ -106,6 +106,10 @@ class HubNotificationListener : NotificationListenerService() {
         invalidateAll()
         HubRepository.disconnected()
         HubNotifications.clear(this)
+        // Clearing removes every card this app posted, including a card that came from an open web session
+        // and needs no notification access. Republishing the surviving state puts those cards back at once
+        // instead of waiting for the page to report a different unread count, which may never happen.
+        HubNotifications.sync(this, HubRepository.state.value)
         super.onListenerDisconnected()
     }
 

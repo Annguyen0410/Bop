@@ -57,6 +57,19 @@
     vk: { mode: 'title', evidence: null },
     bluesky: { mode: 'title', evidence: null },
     wechat: { mode: 'title', evidence: null },
+    // AI assistants do not post message-style unread counts; their tab title is the honest signal this
+    // build already reads natively. A descriptor still exists so the catalog and this table cannot drift.
+    // Mailboxes report their waiting count in the tab title ("Inbox (3) - …"), which is exactly the
+    // aggregate this build reads and nothing more. No DOM descriptor: it could not name a message either.
+    gmail: { mode: 'title', evidence: null, note: 'inbox count in the tab title' },
+    outlook: { mode: 'title', evidence: null, note: 'inbox count in the tab title' },
+    yahoomail: { mode: 'title', evidence: null, note: 'inbox count in the tab title' },
+    icloudmail: { mode: 'title', evidence: null, note: 'inbox count in the tab title' },
+    protonmail: { mode: 'title', evidence: null, note: 'inbox count in the tab title' },
+    zohomail: { mode: 'title', evidence: null, note: 'inbox count in the tab title' },
+    chatgpt: { mode: 'title', evidence: null, note: 'no unread badge; title only' },
+    claude: { mode: 'title', evidence: null, note: 'no unread badge; title only' },
+    gemini: { mode: 'title', evidence: null, note: 'no unread badge; title only' },
   };
 
   /**

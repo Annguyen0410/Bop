@@ -118,7 +118,8 @@ class WebSessionPolicyTest {
         // leaves it. Instagram's phone web build has no direct inbox at all, so it is in this group too.
         // AI sign-in providers reject embedded WebViews, and changing the agent does not make them safe.
         // Keep AI on its responsive layout and expose the external-browser fallback instead.
-        assertEquals(setOf("messenger", "instagram", "tiktok", "zalo", "whatsapp"),
+        assertEquals(setOf("messenger", "instagram", "tiktok", "zalo", "whatsapp",
+            "gmail", "outlook", "yahoomail", "icloudmail", "protonmail", "zohomail"),
             HubApps.ALL.filter { WebSessionPolicy.defaultDesktop(it) }.map { it.id }.toSet())
         listOf(HubApps.CHATGPT, HubApps.CLAUDE, HubApps.GEMINI).forEach {
             assertFalse("${it.id} must not disguise an embedded login as desktop Chrome", WebSessionPolicy.defaultDesktop(it))
