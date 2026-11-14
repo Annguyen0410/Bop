@@ -5,6 +5,10 @@
   "description": "Bop for desktop: many messaging accounts, one quiet hub. Separate browser session per space.",
   "author": "Bop",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Annguyen0410/Bop.git"
+  },
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
