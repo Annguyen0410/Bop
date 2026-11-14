@@ -48,12 +48,39 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      # The wrapper is committed from a Windows checkout, where the executable bit is not tracked by
+      # every tool. Without it `./gradlew` exits 126 in the first second and nothing is tested.
+      - name: Make the Gradle wrapper executable
+        run: chmod +x gradlew
+      # compileSdk 37 is newer than the platform the runner image normally ships. Install it when it is
+      # missing instead of failing the build on a machine-specific SDK inventory.
+      - name: Android SDK platform for compileSdk 37
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -d "$sdk_root/platforms/android-37" ] || [ -d "$sdk_root/platforms/android-37.0" ]; then
+            echo "the compileSdk 37 platform is already installed"
+            exit 0
+          fi
+          if ! command -v sdkmanager >/dev/null 2>&1; then
+            echo "sdkmanager is not on PATH; letting the Android Gradle plugin resolve compileSdk 37"
+            exit 0
+          fi
+          # Platform packages are versioned by release (android-37.0 on this toolchain), so ask the
+          # SDK which id exists instead of guessing one that would make this step fail.
+          package="$(sdkmanager --list 2>/dev/null | grep -oE 'platforms;android-37(\.[0-9]+)?' | sort -uV | tail -1 || true)"
+          if [ -z "$package" ]; then
+            echo "this SDK image lists no android-37 package; the Gradle plugin will resolve it"
+            exit 0
+          fi
+          printf 'y\n' | sdkmanager --install "$package" >/dev/null
       - name: JVM tests
         run: ./gradlew :app:testDebugUnitTest --console=plain
       - name: Debug build
         run: ./gradlew :app:assembleDebug --console=plain
-      - name: Keep test and lint reports when something fails
-        if: failure()
+      - name: Test and lint reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-reports
