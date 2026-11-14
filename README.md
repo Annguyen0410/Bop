@@ -1,25 +1,54 @@
-# Bop
+<p align="center">
+  <img src="assets/bop-icon.png" alt="Bop" width="120">
+</p>
 
-**Many yous. One Bop.** An independent hub that keeps several messaging accounts apart on one device — a
-Windows desktop app and an Android app, each giving every account its own separate browser session.
+<h1 align="center">Bop</h1>
+
+<p align="center">
+  <strong>Many yous. One Bop.</strong><br>
+  An independent hub that keeps several messaging accounts apart on one device — a Windows desktop app
+  and an Android app, each giving every account its own separate browser session.
+</p>
+
+<p align="center">
+  <a href="https://annguyen0410.github.io/Bop/"><img alt="Website" src="https://img.shields.io/badge/website-annguyen0410.github.io%2FBop-84cc16?style=flat-square"></a>
+  <a href="https://github.com/Annguyen0410/Bop/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Annguyen0410/Bop?style=flat-square&label=release&color=84cc16"></a>
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/github/license/Annguyen0410/Bop?style=flat-square&color=84cc16"></a>
+  <img alt="Platforms: Windows and Android" src="https://img.shields.io/badge/platforms-Windows%20%7C%20Android-7c3aed?style=flat-square">
+  <a href="https://github.com/Annguyen0410/Bop/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Annguyen0410/Bop/actions/workflows/ci.yml/badge.svg"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Annguyen0410/Bop/releases/latest"><b>Download</b></a> ·
+  <a href="https://annguyen0410.github.io/Bop/"><b>Website</b></a> ·
+  <a href="docs/verification.md">Verification log</a> ·
+  <a href="docs/PRIVACY.md">Privacy</a> ·
+  <a href="docs/">Docs</a>
+</p>
 
 One window, four spaces, no logging out of anything: Messenger in A, Facebook in B, a paid-study board
 watching itself in C, and a tray icon plus a small floating bubble telling you which one moved.
 
-![The desktop dashboard](docs/evidence/desktop-portable/dashboard-wide-019.png)
-![The bubble with a picture of your own](docs/evidence/desktop-portable/bubble-picture-018.png)
-![The space menu, dark theme](docs/evidence/desktop-portable/menu-dark-017.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/evidence/desktop-portable/dashboard-wide-019.png" alt="The desktop hub with four spaces"><br><sub><b>Desktop hub</b> — one window, four separate sessions</sub></td>
+    <td width="50%"><img src="docs/screenshots/bop-spaces-dark.png" alt="Spaces on Android, dark theme"><br><sub><b>Android</b> — one space per account, one badge per account</sub></td>
+  </tr>
+</table>
 
 Bop was previously called TwoAccMess. Application IDs and the existing browser profile directories are
 unchanged, so upgrading does not deliberately reset your logins.
 
 ## Download and run
 
-| | File | Notes |
+Every file is an asset of the latest release, **[Bop 0.2.8](https://github.com/Annguyen0410/Bop/releases/latest)**.
+
+| Platform | Download | Notes |
 | --- | --- | --- |
-| **Desktop — Windows 10/11 x64 (portable)** | [`Bop-0.2.7-portable.exe`](desktop/dist/Bop-0.2.7-portable.exe) | One self-contained file. No installer, nothing added to Program Files. Your spaces and logins live in `%APPDATA%\Bop` and survive an upgrade. |
-| **Desktop — Windows 10/11 x64 (installer)** | [`Bop-0.2.7-setup.exe`](desktop/dist/Bop-0.2.7-setup.exe) | Per-user installer. Choose this one if you start Bop often. Uninstall from Settings → Apps. |
-| **Android — 7.0 (API 24) or newer** | [`app-debug.apk`](app/build/outputs/apk/debug/app-debug.apk) · [`app-release-unsigned.apk`](app/build/outputs/apk/release/app-release-unsigned.apk) | Debug APK is installable for testing. Release APK is **unsigned**: sign it with your own key before installing it or handing it to anyone. |
+| **Windows 10/11 x64 — portable** | [`Bop-0.2.8-portable.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-portable.exe) | One self-contained file. No installer, nothing added to Program Files. Your spaces and logins live in `%APPDATA%\Bop` and survive an upgrade. |
+| **Windows 10/11 x64 — installer** | [`Bop-0.2.8-setup.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-setup.exe) | Per-user installer. Choose this one if you start Bop often. Uninstall from Settings → Apps. |
+| **Android — 7.0 (API 24) or newer, debug** | [`Bop-2.1.1-android-debug.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-debug.apk) | Debug APK, installable for testing. |
+| **Android — 7.0 (API 24) or newer, unsigned** | [`Bop-2.1.1-android-release-unsigned.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-release-unsigned.apk) | Release APK is **unsigned**: sign it with your own key before installing it or handing it to anyone. |
 
 **First launch on Windows will warn you.** Neither file is code-signed, so SmartScreen shows *“Windows
 protected your PC”* — choose **More info → Run anyway**, or sign the build with your own certificate. Bop
@@ -29,8 +58,8 @@ sign into.
 Check the download before you run it:
 
 ```bash
-sha256sum Bop-0.2.7-portable.exe
-sha256sum Bop-0.2.7-setup.exe
+sha256sum Bop-0.2.8-portable.exe
+sha256sum Bop-0.2.8-setup.exe
 ```
 
 ## The first five minutes (desktop)
@@ -74,9 +103,13 @@ back, the choice is remembered per space, and **Fit the page to this screen** re
 overflows. Signing in can still be refused by the provider inside an embedded browser — the app says so and
 offers **Open Messenger app** and **Open outside Bop** rather than pretending it worked.
 
-![Android spaces](docs/screenshots/bop-spaces-dark.png)
-![The every-phone card](docs/screenshots/bop-everyphone-checks.png)
-![The Android bubble menu](docs/screenshots/bop-bubble-menu.png)
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/bop-spaces-dark.png" alt="Spaces on Android, dark theme"><br><sub>Spaces, one per account</sub></td>
+    <td width="33%"><img src="docs/screenshots/bop-everyphone-checks.png" alt="Runs on every phone: six live checks with a repair button each"><br><sub>Runs on every phone: six live checks</sub></td>
+    <td width="33%"><img src="docs/screenshots/bop-bubble-menu.png" alt="The Android bubble menu"><br><sub>The bubble menu</sub></td>
+  </tr>
+</table>
 
 ## What Bop is, and what it is not
 
