@@ -47,7 +47,7 @@ test('a build without a domain is complete and honest', async () => {
     const html = await readFile(path.join(out, 'index.html'), 'utf8');
     assert.ok(!html.includes('__SITE_URL__'), 'no placeholder survives');
     assert.ok(!html.includes('rel="canonical"'), 'no invented canonical URL');
-    assert.ok(html.includes('content="/assets/img/og.png"'), 'og:image is still declared');
+    assert.ok(html.includes('content="assets/img/og.png"'), 'og:image is still declared');
 
     for (const file of result.files) {
       assert.ok((await stat(path.join(out, file))).size > 0, `${file} is not empty`);

@@ -1,0 +1,62 @@
+name: Website (GitHub Pages)
+
+# Publishes website/ to Pages. The site is static: the build copies the page into website/dist and
+# validates it, and the deploy job hands that folder over. SITE_URL comes from the Pages origin, so
+# the canonical URL, og:image and sitemap resolve on the deployed host — a project page is served
+# from /Bop/, so a repository-root URL would be wrong.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      # Creates the Pages site on the first run if the repository has none yet.
+      - id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Install
+        working-directory: website
+        run: npm ci
+      - name: Build and validate
+        working-directory: website
+        run: npm run build
+        env:
+          SITE_URL: ${{ steps.pages.outputs.base_url || 'https://annguyen0410.github.io/Bop' }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

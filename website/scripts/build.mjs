@@ -22,7 +22,7 @@ function applySiteUrl(html, siteUrl) {
   if (siteUrl) {
     return html
       .replaceAll('__SITE_URL__', siteUrl)
-      .replaceAll('content="/assets/img/og.png"', `content="${siteUrl}/assets/img/og.png"`);
+      .replaceAll('content="assets/img/og.png"', `content="${siteUrl}/assets/img/og.png"`);
   }
   // No domain has been chosen: drop the canonical link rather than invent one. og:image stays
   // root-relative, which resolves on the page but is not enough for a social crawler until
