@@ -21,21 +21,44 @@ monitor thread per account or Android foreground service were added.
   event-ID cache and short correlation credits. Titles/previews/event IDs are not persisted. Only the
   aggregate unread metadata is saved with existing encrypted settings, with writes coalesced for bursts.
 - First loaded unread is a silent baseline; repeated/decreased counts are quiet. Normal navigation and
-  restart rebaseline to avoid old-message alerts. A retry after a known renderer/load failure preserves
-  the in-process baseline so an exposed increase can be reconciled on reload.
-- Cross-source deduplication pairs title delta credits and website notification events within 1 second,
-  in either order. Identical explicit event IDs are ignored. This is **heuristic matching**, not original
+  restart rebaseline to avoid old-message alerts, and so does a route change *inside* a page
+  (`did-navigate-in-page`): a chat app redraws its badge against the account's own state there, so the
+  reading that follows describes what is already there. Measured shape of the bug that rule closes:
+  moving between conversations told the user about messages that had arrived while nobody was watching.
+  A retry after a known renderer/load failure preserves the in-process baseline so an exposed increase
+  can be reconciled on reload.
+- A title that carries a **marker where a count would be** (a dot, a bullet, an asterisk) can only prove
+  that something is there, never how many, so one space rings on a marker at most once a minute: a marker
+  redrawn by a re-rendering badge is not a second message. A count that grew is never rate-limited, and a
+  numbered title is unconstrained by the marker rule.
+- Cross-source deduplication pairs title delta credits and website notification events within 2.5 seconds,
+  in either order — the two sources are one event seen twice, and the notification does not arrive with
+  the title. Identical explicit event IDs are ignored. This is **heuristic matching**, not original
   message-ID deduplication: close unrelated events may pair incorrectly; delayed duplicate sources may
   alert again. A burst title delta causes **one aggregate OS notice**, not N reconstructed messages.
 - Close-to-tray/minimize leaves views alive. Quit stops everything. **Stop monitoring** closes the view,
   removes runtime state/retries, disables its task watcher and stops restoring it, while retaining
   session cookies. Clear session closes it first and erases storage/cache. Service/custom URL replacement
   tears down the old view/state. Removed spaces release resources; base slots remain available.
-- Crash/load failures retry at 30, 60, 120, 240, 480 seconds, then stop automatic attempts after the next
-  failure. Open can retry again. No reload loop for a functioning SPA or a recognized login route.
-- Background throttling is enabled rather than disabled for all page work. The monitor itself has no
-  repeating timer. A one-shot scheduler runs only for opt-in existing task-page watchers, with existing
-  failure backoff and no overlapping watcher runs; it is not message-level reconciliation.
+- Crash/load failures retry at 30, 60, 120, 240, 480 seconds, then stop automatic attempts. That last
+  failure is a state of its own (`monitoring-stopped`) and raises one card for the space; Open starts it
+  again. No reload loop for a functioning SPA or a recognized login route.
+- Background throttling is **disabled** for space views while "Keep pages alive" is on (the default) and
+  enabled for the dashboard view. This is stated the way the code does it: a hidden chat page has to be an
+  ordinary visible page for its own timers and badge to run, which is why the switch exists. An earlier
+  version of this paragraph said the opposite. The monitor itself has no repeating timer. A one-shot
+  scheduler runs only for opt-in existing task-page watchers, with existing failure backoff and no
+  overlapping watcher runs; it is not message-level reconciliation.
+- **Monitoring health is visible.** `reauthentication-required` (the page went to a sign-in screen) and
+  `monitoring-stopped` (the retry budget ran out) each raise one alert for that space, with a native
+  notification and a reminder card, and clear silently after a page loads normally again. The rule lives in
+  [monitor-health.js](../desktop/src/main/monitor-health.js) and is unit-tested. Each space also reports
+  `lastReadyAt` / `lastAlertAt` timestamps in the dashboard snapshot — timestamps only, never page content.
+- **Settings and notes are two encrypted stores.** `bop-settings.bin` holds spaces, preferences and unread
+  metadata; `bop-settings.bin.notes` holds the note bodies (images are the bulk). A background event
+  rewrites only the small settings store, which is what keeps monitoring off the main thread's critical
+  path. Both are written through a temporary file and renamed, and a settings file from an older build is
+  migrated on the first save. Measured cost and procedure: [perf-notes.js](../desktop/tools/perf-notes.js).
 - Small existing UI additions: lifecycle status, title unread value, Stop monitoring and global
   **Message sound** mute. `observing-auth-unknown` explicitly does not assert authenticated/live service
   delivery. `reauthentication-required` is a login-path hint, not verified token/auth status. A silently
@@ -122,9 +145,12 @@ fingerprint checks and are not represented as message detectors.
 
 ## Verification and acceptance matrix
 
-- Desktop: **51 Node tests, 0 failures/skips**; all JS main/renderer/test files pass `node --check`.
-- Android: **106 JVM tests, 0 failures/errors/skips**, Kotlin compilation included via
-  `:app:testDebugUnitTest`. No `assemble`, Electron packaging or installer task was run.
+- Desktop: **136 Node tests, 0 failures/skips**; all JS main/renderer/test files pass `node --check`.
+- Android: **142 JVM tests, 0 failures/errors/skips**, Kotlin compilation included via
+  `:app:testDebugUnitTest`; `:app:assembleDebug` also succeeds.
+- Android on a device: an API 37 emulator (`sdk_gphone16k_x86_64`) ran the real notification path with a
+  fixture app posting as `com.whatsapp` — see [android-device.json](evidence/major-update/android-device.json).
+  That is an emulator, not a phone with an OEM battery manager.
 - New source Electron test: **3 separate same-origin local SSE sessions**, not real messaging service
   accounts. [Harness](../desktop/src/main/monitor-smoke.js) drives actual Chromium views, real SSE
   connections, persistent session cookies, native title events, preload/IPC, settings files and OS
@@ -148,8 +174,8 @@ fingerprint checks and are not represented as message detectors.
 | Renderer crashes/reconnects | Real Chromium renderer crash; real 30-second retry; fixture latest unread delta reconciled |
 | Network interruption/recovery | Actual session offline/online; fixture site's own EventSource reconnects and exposes latest unread |
 | Expired account isolation | Local login-route hint tested; real authentication expiry NOT tested |
-| App restart | Real encrypted settings roundtrip and loaded-id/unread restore tested; full process restart and live logged-in restore NOT tested |
-| Android device/background/audio | NOT tested: adb reports no attached device; host memory insufficient for previous emulator. JVM state tests are not device proof |
+| App restart | Real encrypted settings roundtrip, desktop process restart, and a full **reboot** of the Android emulator with 3 spaces restored. A live logged-in web session is still NOT tested |
+| Android device/background/audio | Background kill, forced deep idle, listener revoke/re-grant, `POST_NOTIFICATIONS` revoke/re-grant and reboot passed on an emulator with a fixture notification source. Real OEM battery managers, real provider pushes and audible sound are still NOT tested |
 | Genuine incoming provider message | NOT tested; no authorized signed-in test account/message-send flow supplied |
 
 ## Resource measurements

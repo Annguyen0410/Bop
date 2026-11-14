@@ -54,7 +54,7 @@ Raw log: [jvm-tests.txt](evidence/scanning/jvm-tests.txt). No APK was assembled 
 
 [`unread-reader.js`](../app/src/main/assets/unread-reader.js) is a dependency-free file injected into a
 space's own page with `evaluateJavascript`. It answers one question — *how much unread, and how much of
-that sits in threads the user muted* — and it carries **one descriptor per catalog app** (all 19 ids in
+that sits in threads the user muted* — and it carries **one descriptor per catalog app** (all 22 ids in
 [`HubApps`](../app/src/main/java/com/example/twoaccmess/HubApps.kt)). A descriptor says where to look
 (`row`, `unread`, `muted`, `count`, optional `empty`); the file only decides how to count. Adding a site
 is therefore a data edit, not a new code path.
@@ -63,7 +63,7 @@ is therefore a data edit, not a new code path.
 the reader returns **null** and never tries the selectors anyway, because a guessed selector does not
 fail loudly — it matches nothing and reports `0 unread`, which is indistinguishable from "everything is
 fine" in a product whose entire job is not missing a message. `null` means "cannot see right now"; the
-sweep keeps the previous baseline and raises nothing. That is why every one of the 19 catalog apps is
+sweep keeps the previous baseline and raises nothing. That is why every one of the 22 catalog apps is
 currently registered as `mode: 'title'` (the honest signal it already has, read natively by
 [`WebUnread`](../app/src/main/java/com/example/twoaccmess/WebUnread.kt)) and **no** app claims DOM
 readiness without evidence. A test enforces exactly that.
@@ -162,7 +162,7 @@ suspends CPU and network, so a screen-off sweep is best-effort at best. Nothing 
 
 1. One real site's descriptor is filled in from a signed-in page, marked with the evidence that
    promoted it, and pinned by a fixture captured from that page (never against live network in a test).
-   The mechanism it plugs into is already verified: 11 DOM tests, all 19 apps registered, refusals tested.
+   The mechanism it plugs into is already verified: 11 DOM tests, all 22 apps registered, refusals tested.
 2. A space process drives `Sweep.step(slots)` every 10 s while its page is alive and posts each `Step`
    across the boundary; the hub applies it through the existing `mutate` path.
 3. A message in a website-muted thread produces **no** card, and an unmuted one produces exactly one.

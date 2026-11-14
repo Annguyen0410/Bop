@@ -120,20 +120,33 @@ module.exports = async function monitorSmoke(api) {
       limitation: 'OS audible playback is not asserted; title changes expose no original message IDs' });
 
     const a = spaceViews.get('A');
+    const healthFor = (id) => api.snapshot().alerts.find((alert) => alert.spaceId === id && alert.tag === 'health');
     await a.webContents.loadURL(`${origin}/login`);
     await until(() => monitors.get('A').status === 'reauthentication-required', 'login route status hint');
+    // A page that lands on a sign-in screen used to stop this account silently: the status string said so
+    // and nothing else did. It must now be one user-visible card, raised for A alone.
+    await until(() => api.notificationAttempts() === 8 && !!healthFor('A'), 'sign-in-required card', 8_000);
+    assert.equal(healthFor('B'), undefined, 'a sign-in failure must not raise a card for another account');
+    assert.equal(healthFor('C'), undefined, 'a sign-in failure must not raise a card for another account');
+    await wait(200);
+    assert.equal(api.notificationAttempts(), 8, 'staying on the sign-in page does not repeat the card');
     send('C', 'c-4');
-    await until(() => api.notificationAttempts() === 8, 'peer account survives login failure');
+    await until(() => api.notificationAttempts() === 9, 'peer account survives login failure');
     await a.webContents.loadURL(`${origin}/chat`);
     await until(() => monitors.get('A').status === 'observing-auth-unknown', 'login resumed');
-    steps.push({ name: 'login-path hint and account independence', passed: true, limitation: 'not an actual provider token expiration' });
+    // Recovery is silent and removes the card, so the Alerts list stops claiming a problem that is gone.
+    await until(() => !healthFor('A'), 'sign-in card clears after a working load');
+    assert.equal(api.notificationAttempts(), 9, 'recovery must not interrupt the user');
+    steps.push({ name: 'a login route raises exactly one card for its own account and a working load clears it', passed: true,
+      limitation: 'not an actual provider token expiration' });
 
     // Renderer crash exercises the real lifecycle callback and the production 30-second first retry.
     b.webContents.forcefullyCrashRenderer();
     await until(() => monitors.get('B').status === 'temporarily-unavailable' && retryTimers.has('B'), 'crash backoff');
     counts.set('B', counts.get('B') + 1); // Authoritative fixture state changed while renderer was down.
     await until(() => monitors.get('B').status === 'observing-auth-unknown' && monitors.get('B').unread === counts.get('B'), 'renderer recovery and unread delta', 45_000);
-    assert.equal(api.notificationAttempts(), 9);
+    assert.equal(api.notificationAttempts(), 10);
+    assert.equal(healthFor('B'), undefined, 'a retried renderer crash is not a monitoring-stopped card');
     steps.push({ name: 'renderer crash retries with real backoff, preserves profile and reconciles exposed unread delta', passed: true });
 
     // Offline network on C: live EventSource cannot receive, but remains a single site-owned connection.
@@ -144,22 +157,47 @@ module.exports = async function monitorSmoke(api) {
     counts.set('C', counts.get('C') + 1);
     await c.webContents.session.enableNetworkEmulation({ offline: false });
     await until(() => monitors.get('C').unread === counts.get('C'), 'site EventSource reconnect', 12_000);
-    await until(() => api.notificationAttempts() === 10, 'post-network unread delta');
+    await until(() => api.notificationAttempts() === 11, 'post-network unread delta');
     steps.push({ name: 'fixture site reconnects its own EventSource and exposes missed unread after network restore', passed: true,
       limitation: 'no provider sync API/cursor; same-count or read messages are not recoverable' });
 
     api.mute(true);
     send('C', 'muted-message');
-    await until(() => api.notificationAttempts() === 11, 'Bop mute keeps monitoring but requests silent OS notice');
+    await until(() => api.notificationAttempts() === 12, 'Bop mute keeps monitoring but requests silent OS notice');
     assert.equal(api.notificationDiagnostics().lastSilent, true);
     api.mute(false);
     steps.push({ name: 'Bop sound mute leaves detection operational and requests silent OS notification', passed: true });
+
+    // Where the persistence cost actually lives. Note bodies used to be inside the one settings blob, so
+    // every background event re-encrypted and re-wrote them; they are measured here, on the real stores.
+    assert.equal(api.persistence.seedNotes(8), 8, 'eight notes with attachments were stored');
+    assert.equal(api.saveSettings(), true);
+    const settingsSize = fs.statSync(api.persistence.settingsPath()).size;
+    const notesSize = fs.statSync(api.persistence.notesStorePath()).size;
+    assert.ok(notesSize > 2_000_000, `the note store carries the bodies (${notesSize} bytes)`);
+    assert.ok(settingsSize < 100_000, `the settings file stays small (${settingsSize} bytes)`);
+    const writesBefore = api.persistence.stats();
+    send('B', 'b-notes');
+    await until(() => api.notificationAttempts() === 13, 'a message after notes were seeded');
+    // persistMonitor coalesces its write, so give it the coalescing window before reading the counters.
+    await wait(1_500);
+    const writesAfter = api.persistence.stats();
+    assert.equal(writesAfter.noteWrites, writesBefore.noteWrites, 'a message event must not rewrite the note store');
+    assert.ok(writesAfter.saves > writesBefore.saves, 'the small settings file is still written');
+    report.notesPersistence = {
+      settingsBytes: settingsSize, notesBytes: notesSize,
+      settingsWrittenByOneEvent: writesAfter.settingsBytes - writesBefore.settingsBytes,
+      noteBytesWrittenByOneEvent: writesAfter.noteBytes - writesBefore.noteBytes,
+    };
+    steps.push({ name: 'note bodies live in their own store and a message event writes only the small settings file', passed: true,
+      limitation: 'byte counts, not a wall-clock profile of the user\'s own note collection' });
 
     api.saveSettings();
     const restored = api.loadSettings();
     assert.deepEqual(restored.loadedSlots.sort(), ['A', 'B', 'C']);
     assert.equal(restored.monitorState.C.unread, counts.get('C'));
-    steps.push({ name: 'real encrypted settings restore loaded ids/unread metadata', passed: true,
+    assert.equal(restored.notes.length, 8, 'notes come back from their own store');
+    steps.push({ name: 'real encrypted settings and note stores restore ids/unread metadata and note bodies', passed: true,
       limitation: 'settings roundtrip, not a full process-restart/live login test' });
 
     await wait(1200);

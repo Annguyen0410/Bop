@@ -35,6 +35,9 @@ function render(payload) {
   more.textContent = payload.also ? `+${payload.also} more` : '';
   open.textContent = `Open ${payload.spaceLabel || ''}`.trim();
   document.title = `Bop · ${payload.title}`;
+  // Two frames: the first ends after this text has been laid out, the second is the boundary the window is
+  // shown on, so nothing is ever visible with an empty title or body. See [deliverReminder].
+  requestAnimationFrame(() => requestAnimationFrame(() => window.bop.reminder.painted()));
 }
 
 function openSpace() {

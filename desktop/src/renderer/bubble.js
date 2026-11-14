@@ -104,9 +104,18 @@ document.addEventListener('contextmenu', (event) => {
 });
 
 function render(state) {
-  const unread = state.alerts.filter((alert) => !alert.acknowledged).length;
-  badge.hidden = unread === 0;
-  badge.textContent = unread > 99 ? '99+' : String(unread);
+  // The count, the digits and the tone are decided in the main process (`vip-badge.js`) so the desktop
+  // and the phone share one rule. This function only paints them; the fallback keeps an older snapshot
+  // usable instead of drawing an invisible badge.
+  const summary = state.badge || {};
+  const unread = Number.isFinite(summary.count)
+    ? summary.count
+    : state.alerts.filter((alert) => !alert.acknowledged).length;
+  const visible = summary.visible === undefined ? unread > 0 : summary.visible === true;
+  badge.hidden = !visible;
+  badge.textContent = summary.label || (unread > 99 ? '99+' : String(unread));
+  // `vip` is the whole highlight: red disc, white digits, and the same 99+ digits as before.
+  badge.dataset.tone = summary.tone === 'vip' ? 'vip' : 'normal';
 
   // The face: the picture the user picked, or the drawn smile. `bubbleAvatar` is already a data URL, so
   // it survives the file it came from being moved — and the page's own policy allows exactly that.
@@ -114,8 +123,9 @@ function render(state) {
   picture.hidden = !face;
   mark.hidden = !!face;
   if (face && picture.getAttribute('src') !== face) picture.src = face;
+  const vipWaiting = Number.isFinite(summary.vipCount) ? summary.vipCount : 0;
   core.title = unread
-    ? `Your spaces · ${unread} new`
+    ? `Your spaces · ${unread} new${vipWaiting ? ` · ${vipWaiting} VIP` : ''}`
     : `Your spaces · ${state.enabled.length}`;
 }
 

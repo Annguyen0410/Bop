@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { AccountMonitor, unreadCount, retryDelay, loginPage, MAX_SEEN } = require('../src/main/message-monitor.js');
+const { AccountMonitor, unreadCount, markerOnly, retryDelay, loginPage, MAX_SEEN } = require('../src/main/message-monitor.js');
 const spaces = require('../src/main/spaces.js');
 
 function ready(saved) { const monitor = new AccountMonitor(saved); monitor.start(); monitor.ready('https://example.com/chat'); return monitor; }
@@ -90,6 +90,55 @@ test('expired account is a status hint and does not affect peers', () => {
   assert.ok(loginPage('https://example.com/auth/signin'));
   assert.equal(retryDelay(1), 30_000);
   assert.equal(retryDelay(100), 900_000);
+});
+
+test('a redrawn marker rings once per cooldown, while a numbered rise always rings', () => {
+  const m = ready();
+  m.title('Chat', 0);
+  assert.equal(m.title('• Chat', 1000).incoming, 1, 'a marker where there was nothing is evidence of something');
+  assert.equal(m.title('Chat', 2000).unread, 0);
+  // A site that redraws its badge hands the same marker back: nothing was said, so nothing rings.
+  assert.equal(m.title('• Chat', 3000).incoming, 0);
+  assert.equal(m.title('Chat', 4000).unread, 0);
+  assert.equal(m.title('• Chat', 5000).incoming, 0);
+  // Past the cooldown it is news again, because a dot cannot say how many — only that something is there.
+  assert.equal(m.title('Chat', 70_000).unread, 0);
+  assert.equal(m.title('• Chat', 71_000).incoming, 1);
+
+  // A number that grew is evidence of a message and is never rate-limited by the marker rule.
+  const n = ready();
+  n.title('(1) Chat', 0);
+  assert.equal(n.title('(2) Chat', 1000).incoming, 1);
+  assert.equal(n.title('(1) Chat', 2000).unread, 1);
+  assert.equal(n.title('(2) Chat', 3000).incoming, 1);
+
+  // The marker set is exactly the one `unreadCount` counts, so the two can never disagree about a title.
+  assert.equal(markerOnly('• Chat'), unreadCount('• Chat') === 1);
+  assert.equal(markerOnly('* Chat'), unreadCount('* Chat') === 1);
+  assert.equal(markerOnly('● Discord'), unreadCount('● Discord') === 1);
+  assert.ok(!markerOnly('(1) Chat') && !markerOnly('1 · Telegram') && !markerOnly('Chat'));
+});
+
+test('a route change inside a page rebaselines, so a redrawn badge is not an arrival', () => {
+  const m = ready();
+  m.title('(2) Chat', 0);
+  assert.equal(m.title('(3) Chat', 1000).incoming, 1);
+  // Moving to another conversation makes the app draw its badge again out of the account's own state, so
+  // the page that comes back reports what was already there — including messages from while nobody looked.
+  m.navigate();
+  assert.equal(m.title('(7) Chat', 2000).incoming, 0, 'the redrawn badge is a baseline, not four messages');
+  assert.equal(m.unread, 7, 'and the count it reported is the one that is kept');
+  // A rise with no navigation in between is still a message.
+  assert.equal(m.title('(8) Chat', 3000).incoming, 1);
+});
+
+test('one message seen by both sources a couple of seconds apart is one arrival', () => {
+  const m = ready();
+  m.title('Chat', 0);
+  assert.equal(m.title('(1) Chat', 1000).incoming, 1);
+  // The page's own Notification for that same message lands later than its title did.
+  assert.equal(m.website({ eventId: 'late' }, 3000), false, 'the notification pairs with the title it belongs to');
+  assert.equal(m.website({ eventId: 'next' }, 10_000), true, 'a distinct event outside the window still counts');
 });
 
 test('saved metadata is bounded, contains no credentials/previews and respects sound mute', () => {

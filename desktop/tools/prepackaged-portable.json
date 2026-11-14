@@ -6,10 +6,11 @@
     "src/**/*",
     "package.json"
   ],
+  "electronLanguages": ["en-US"],
   "nsis": { "artifactName": "Bop-${version}-setup.exe" },
   "win": {
     "icon": "build/bop.ico",
     "target": [{ "target": "portable", "arch": ["x64"] }]
   },
-  "portable": { "artifactName": "Bop-${version}-portable.exe" }
+  "portable": { "artifactName": "Bop-${version}-portable.exe", "unpackDirName": "bop-portable", "useZip": true }
 }

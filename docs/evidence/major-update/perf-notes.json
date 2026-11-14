@@ -1,0 +1,31 @@
+
+{
+  "measuredOn": "win32 x64",
+  "electron": "38.8.6",
+  "encryptionAvailable": true,
+  "notes": 8,
+  "imageBytes": 500000,
+  "rounds": 7,
+  "before": {
+    "description": "one settings blob holding settings + every note body (0.2.7 behaviour)",
+    "medianMsPerSave": 27.04,
+    "settingsBytes": 5334680,
+    "writtenBytes": 5334711
+  },
+  "after": {
+    "description": "small settings store per event; note bodies written only when notes change",
+    "medianMsPerSave": 0.36,
+    "settingsBytes": 254,
+    "writtenBytes": 285
+  },
+  "noteStore": {
+    "description": "one write when a note is added or deleted, not per event",
+    "msPerWrite": 24.42,
+    "bytes": 5334459
+  },
+  "perEvent": {
+    "removedMs": 26.68,
+    "removedBytes": 5334426,
+    "ratio": 75.1
+  }
+}

@@ -8,6 +8,7 @@ const {
 } = require('electron');
 
 const spaces = require('./spaces.js');
+const vipBadge = require('./vip-badge.js');
 const watcher = require('./watcher.js');
 const docking = require('./docking.js');
 const bubbleDrag = require('./bubble-drag.js');
@@ -1915,6 +1916,7 @@ function snapshot() {
     enabled: spaces.enabledSpaces(state).map((space) => ({
       ...space,
       accent: spaces.hexColor(space.appId),
+      vip: space.vip === true,
       hosts: spaces.hostsFor(space),
       // Whether Open has a page to show, decided by the same rule the main process uses, so the UI can
       // say "this needs an address" before the user clicks instead of after.
@@ -1936,6 +1938,10 @@ function snapshot() {
       lastAlertAt: monitors.get(space.id)?.lastEventAt || 0,
       monitoringStopped: monitors.get(space.id)?.status === 'monitoring-stopped',
     })),
+    // What the bubble draws, decided once here: how many cards are waiting, the digits, and whether
+    // a VIP space is among them. The renderer paints this and never recounts, so the two apps cannot
+    // disagree about what red means.
+    badge: vipBadge.badgeState(alerts, vipBadge.vipIdsFrom(spaces.enabledSpaces(state))),
     alerts,
     theme: state.theme,
     bubble: state.bubble,
@@ -2234,6 +2240,13 @@ function registerIpc() {
   });
 
   ipcMain.handle('bop:rename', (_event, id, label) => { state = spaces.rename(state, id, label); saveSettings(); broadcast(); return { ok: true }; });
+  // The VIP flag only paints the bubble's badge, so it costs no reload and no session work.
+  ipcMain.handle('bop:set-vip', (_event, id, vip) => {
+    state = spaces.setVip(state, id, vip === true);
+    saveSettings();
+    broadcast();
+    return { ok: true, space: spaces.accountFor(state, id) };
+  });
   ipcMain.handle('bop:select-app', (_event, id, appId, kind) => {
     const previous = spaces.accountFor(state, id);
     state = spaces.selectApp(state, id, appId, { kind });

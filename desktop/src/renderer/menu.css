@@ -39,6 +39,11 @@ html, body {
 .panel-list .space-row { padding: 8px 10px; }
 .panel-list .space-row:hover { background: var(--surface-2); }
 .panel-list .space-label { font-size: 13.5px; }
+/* The last real thing this account said. One line, clipped: the row has to stay a glance, not a log. */
+.panel-list .space-note {
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
 .panel-list .chevron { flex: none; color: var(--muted); font-size: 15px; font-weight: 700; opacity: 0.7; }
 .panel-list .space-row:hover .chevron { opacity: 1; }
 

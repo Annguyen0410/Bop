@@ -1,0 +1,64 @@
+{
+  "kind": "real navigation failure through the production retry ladder",
+  "ok": true,
+  "steps": [
+    {
+      "name": "space A loads a URL nothing listens on",
+      "passed": true,
+      "atMs": 62
+    },
+    {
+      "name": "the sixth failure stops monitoring, raises one card and requests one OS notification",
+      "passed": true,
+      "limitation": "a refused local connection, not a provider outage"
+    },
+    {
+      "name": "a working load restores monitoring and clears the card without a new notification",
+      "passed": true
+    }
+  ],
+  "observations": [
+    {
+      "atMs": 62,
+      "status": "loading",
+      "failures": 0,
+      "retryPending": false
+    },
+    {
+      "atMs": 584,
+      "status": "temporarily-unavailable",
+      "failures": 1,
+      "retryPending": true
+    },
+    {
+      "atMs": 450582,
+      "status": "loading",
+      "failures": 4,
+      "retryPending": false
+    },
+    {
+      "atMs": 450840,
+      "status": "temporarily-unavailable",
+      "failures": 5,
+      "retryPending": true
+    },
+    {
+      "atMs": 930863,
+      "status": "monitoring-stopped",
+      "failures": 6,
+      "retryPending": false
+    },
+    {
+      "atMs": 931127,
+      "status": "observing-auth-unknown",
+      "failures": 0,
+      "retryPending": false,
+      "note": "recovered"
+    }
+  ],
+  "exhaustedAtMs": 930879,
+  "failures": 6,
+  "alertTitle": "Account A stopped being monitored",
+  "alertBody": "The page failed repeatedly and Bop stopped retrying, so nothing from this account can reach you. Open the space to start again; the saved session is kept.",
+  "notificationAttempts": 1
+}

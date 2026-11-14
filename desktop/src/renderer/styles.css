@@ -139,6 +139,18 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .card h3 { margin: 0 0 6px; font-size: 15px; }
 .card p { margin: 0; color: var(--muted); font-size: 12.5px; }
+/* The VIP flag on a space card. Same red as the bubble's red badge, so the two read as one thing: this
+   is the space that turns the badge red. */
+.row-status.vip {
+  background: #d32f2f;
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
 .card-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .card-head { display: flex; align-items: flex-start; gap: 10px; }
 

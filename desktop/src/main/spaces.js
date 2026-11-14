@@ -7,7 +7,9 @@
  *
  * 1. A space carries a `kind`. `social` spaces are the messaging accounts the phone build already
  *    handles. `tasks` spaces are the work/earning sites (user-testing panels, crowdsourcing platforms)
- *    that the phone build deliberately does not have.
+ *    that the phone build deliberately does not have. `ai` spaces are the chat assistants (ChatGPT,
+ *    Claude, Gemini); one space is one login, so the same service added twice holds two accounts. The
+ *    phone build also has the AI entries, but not the task panels.
  * 2. A space can be *watched*. On the desktop the page keeps a live connection and its own
  *    Notification API works, so Bop can also notice a page that changed while nobody was looking —
  *    which is the whole point of the task spaces, where a new test disappears in minutes.
@@ -19,7 +21,7 @@
 const MAX_ORDINAL = 2147483647; // Same ceiling as the Android 32-bit Int, so ids stay interchangeable.
 const MAX_NAME_LENGTH = 7;
 
-const KINDS = ['social', 'tasks'];
+const KINDS = ['social', 'tasks', 'ai', 'mail'];
 const DEFAULT_KIND = 'social';
 
 /** A..Z, AA..AZ, BA.. -> the A1Z26-bijective name for a zero-based ordinal. */
@@ -62,12 +64,19 @@ const ACCENTS = {
   threads: 0x8b5cf6, reddit: 0xff4500, discord: 0x5865f2, snapchat: 0xf5c518,
   linkedin: 0x0a66c2, viber: 0x7360f2, skype: 0x00aff0, googlechat: 0x00ac47,
   vk: 0x0077ff, bluesky: 0x0085ff, wechat: 0x07c160,
+  // AI assistants. One space is one signed-in account; adding the same service twice is the whole
+  // multi-account story, so these are catalog entries rather than custom URLs.
+  chatgpt: 0x10a37f, claude: 0xd97757, gemini: 0x4285f4,
   // Task and earning panels. Verified entry domains; a panel that moves keeps working because every
   // task space's URL stays editable in the app.
   usertesting: 0xff4a9c, userlytics: 0xff8a00, prolific: 0x1f9d55, clickworker: 0x0f766e,
   toloka: 0xffd400, appen: 0x0057b8, utest: 0x00a3e0, mturk: 0xff9900,
   userfeel: 0x7c3aed, intellizoom: 0x0ea5e9, trymata: 0xdb2777, respondent: 0x111827,
   testbirds: 0x84cc16,
+  // Mailboxes. One space is one signed-in mailbox, so a Gmail and an Outlook account are two spaces
+  // with two cookie jars rather than one screen that keeps swapping accounts.
+  gmail: 0xea4335, outlook: 0x0078d4, yahoomail: 0x6001d2, icloudmail: 0x007aff,
+  protonmail: 0x6d4aff, zohomail: 0xf0483b,
   custom: 0x7862bc,
 };
 
@@ -99,6 +108,27 @@ const APPS = [
   { id: 'vk', label: 'VK', kind: 'social', home: 'https://vk.com/im', hosts: ['vk.com', 'vk.me', 'vk.cc'], login: 'Sign in normally.' },
   { id: 'bluesky', label: 'Bluesky', kind: 'social', home: 'https://bsky.app/messages', hosts: ['bsky.app', 'bsky.social'], login: 'Sign in with your handle and app password.' },
   { id: 'wechat', label: 'WeChat', kind: 'social', home: 'https://web.wechat.com/', hosts: ['wechat.com', 'weixin.qq.com'], login: 'Scan the QR code with WeChat on your phone.' },
+
+  // ---- mailboxes -------------------------------------------------------------------------------
+  // A mailbox is a web page like every other space: its own cookies, its own login, its own tab
+  // title. Sign-in is the provider's own page, which is why the identity hosts each provider hands
+  // the login to are on the allow-list. Where a provider refuses an embedded browser the space says
+  // so on its card and offers the system-browser fallback instead of pretending it worked.
+  { id: 'gmail', label: 'Gmail', kind: 'mail', home: 'https://mail.google.com/', hosts: ['mail.google.com', 'accounts.google.com', 'myaccount.google.com'], login: 'Sign in with your Google account. Google may refuse its sign-in inside an embedded browser; if the page says the browser is not secure, use Open site in browser. Add the mailbox again for a second Google account — each space keeps its own cookies.' },
+  { id: 'outlook', label: 'Outlook', kind: 'mail', home: 'https://outlook.live.com/mail/', hosts: ['outlook.live.com', 'outlook.office.com', 'outlook.office365.com', 'login.microsoftonline.com', 'login.live.com', 'account.live.com'], login: 'Sign in with your Microsoft account, work or personal. Sign-in continues on Microsoft’s own login hosts, which is why they are allowed in this space.' },
+  { id: 'yahoomail', label: 'Yahoo Mail', kind: 'mail', home: 'https://mail.yahoo.com/', hosts: ['mail.yahoo.com', 'login.yahoo.com', 'accounts.yahoo.com'], login: 'Sign in with your Yahoo account. Two spaces can hold two Yahoo mailboxes side by side.' },
+  { id: 'icloudmail', label: 'iCloud Mail', kind: 'mail', home: 'https://www.icloud.com/mail', hosts: ['icloud.com', 'appleid.apple.com'], login: 'Sign in with your Apple Account. Apple sends a two-factor code to a trusted device, and its sign-in page stays on appleid.apple.com.' },
+  { id: 'protonmail', label: 'Proton Mail', kind: 'mail', home: 'https://mail.proton.me/', hosts: ['proton.me', 'protonmail.com', 'account.proton.me'], login: 'Sign in with your Proton account. Proton may ask for a second password; both stay inside this space.' },
+  { id: 'zohomail', label: 'Zoho Mail', kind: 'mail', home: 'https://mail.zoho.com/', hosts: ['mail.zoho.com', 'accounts.zoho.com'], login: 'Sign in with your Zoho account, including a custom-domain mailbox hosted by Zoho.' },
+
+  // ---- AI accounts ----------------------------------------------------------------------------
+  // One space holds one login. Adding ChatGPT, Claude or Gemini a second time gives that service a
+  // second isolated cookie jar, so two accounts can stay signed in side by side and switch by opening
+  // either space. Sign-in hosts are listed here because these services hand the login to an identity
+  // provider; the extra-host prompt still covers anything a provider changes later.
+  { id: 'chatgpt', label: 'ChatGPT', kind: 'ai', home: 'https://chatgpt.com/', hosts: ['chatgpt.com', 'openai.com', 'accounts.google.com', 'appleid.apple.com', 'idmsa.apple.com', 'login.microsoftonline.com', 'login.live.com', 'account.live.com'], login: 'Sign in with email, Google, Microsoft or Apple. Some identity providers block embedded browsers. The system-browser fallback does not share its login with this space.' },
+  { id: 'claude', label: 'Claude', kind: 'ai', home: 'https://claude.ai/', hosts: ['claude.ai', 'anthropic.com', 'accounts.google.com'], login: 'Sign in with email or Google. Google may block sign-in inside embedded browsers; its system-browser session remains outside Bop.' },
+  { id: 'gemini', label: 'Gemini', kind: 'ai', home: 'https://gemini.google.com/', hosts: ['gemini.google.com', 'accounts.google.com', 'myaccount.google.com'], login: 'Gemini requires Google sign-in. Google blocks OAuth inside embedded browsers; opening Gemini in the system browser will not sign in this isolated Bop space.' },
 
   // ---- task and earning panels ----------------------------------------------------------------
   { id: 'usertesting', label: 'UserTesting', kind: 'tasks', home: 'https://www.usertesting.com/', hosts: ['usertesting.com'], login: 'Sign in at the top right, then open the tester dashboard. New tests appear there, and a test can fill up within minutes.' },
@@ -133,12 +163,75 @@ function hexColor(id) {
   return `#${value.toString(16).padStart(6, '0')}`;
 }
 
-/** A custom space allows exactly the host the user typed; a catalog space allows its own domains. */
+/**
+ * A custom space allows exactly the host the user typed; a catalog space allows its own domains. On top
+ * of that, a space may have been *granted* extra hosts for a sign-in flow (Google, Microsoft, a panel
+ * that serves its login from another domain). Those grants are explicit, per-space and revocable — see
+ * [grantHost] and [revokeHost] — so a login redirect never has to be allowed for every space at once.
+ */
 function hostsFor(space) {
   const app = appOrDefault(space.appId);
-  if (space.appId !== 'custom') return app.hosts;
-  const hostname = hostnameOf(space.url);
-  return hostname ? [hostname] : [];
+  const base = space.appId === 'custom'
+    ? (hostnameOf(space.url) ? [hostnameOf(space.url)] : [])
+    : app.hosts;
+  const extra = Array.isArray(space.extraHosts) ? space.extraHosts : [];
+  return [...new Set([...base, ...extra])];
+}
+
+/**
+ * Turns a host into the one form Bop stores: lower case, no scheme, no path, no leading dot.
+ * Null means "not a host we are willing to allow", which is safer than guessing.
+ */
+function normalizeHost(value) {
+  if (typeof value !== 'string') return null;
+  const host = value.trim().toLowerCase().replace(/^\.+/, '').replace(/\.+$/, '');
+  if (!host || host.length > 253) return null;
+  if (host === 'localhost') return host;
+  // Dotted DNS name or an IPv4 literal. No ports, paths, credentials or wildcards: a grant is one host.
+  const dns = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/;
+  const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+  if (ipv4.test(host)) return host.split('.').every((part) => Number(part) <= 255) ? host : null;
+  return dns.test(host) ? host : null;
+}
+
+/** Bounded list of granted hosts; a hand-edited file cannot grow it without limit. */
+const MAX_EXTRA_HOSTS = 16;
+
+function normalizeExtraHosts(value) {
+  const list = Array.isArray(value) ? value : [];
+  const hosts = [];
+  for (const entry of list) {
+    const host = normalizeHost(entry);
+    if (host && !hosts.includes(host)) hosts.push(host);
+    if (hosts.length >= MAX_EXTRA_HOSTS) break;
+  }
+  return hosts;
+}
+
+/** Grants one host to one space. Granting a host that is already allowed changes nothing. */
+function grantHost(state, id, host) {
+  const normalized = normalizeHost(host);
+  if (!normalized || !state.slots.includes(id)) return state;
+  return {
+    ...state,
+    spaces: state.spaces.map((space) => {
+      if (space.id !== id) return space;
+      const extraHosts = normalizeExtraHosts([...(space.extraHosts || []), normalized]);
+      return extraHosts.length === (space.extraHosts || []).length ? space : { ...space, extraHosts };
+    }),
+  };
+}
+
+/** Takes one granted host away again. The catalog's own hosts are never removable. */
+function revokeHost(state, id, host) {
+  const normalized = normalizeHost(host);
+  if (!normalized || !state.slots.includes(id)) return state;
+  return {
+    ...state,
+    spaces: state.spaces.map((space) => (space.id === id
+      ? { ...space, extraHosts: (space.extraHosts || []).filter((value) => value !== normalized) }
+      : space)),
+  };
 }
 
 function hostnameOf(url) {
@@ -201,7 +294,11 @@ function openTarget(space) {
 
 const DEFAULT_SLOTS = ['A', 'B'];
 /** Bumped when a stored file needs a one-time repair on read; see [normalize]. */
-const STATE_VERSION = 4;
+const STATE_VERSION = 6;
+/** The version that lowered the default live-page budget from five pages to three; see [DEFAULT_LIVE_LIMIT]. */
+const LIVE_LIMIT_VERSION = 5;
+/** The version that moved mailboxes off the legacy mobile build; see [defaultPhoneLayout]. */
+const MAIL_LAYOUT_VERSION = 6;
 const BUBBLE_VERSION = 3;
 /** The version that introduced per-kind layouts; a file older than this gets its layout repaired once. */
 const LAYOUT_VERSION = 2;
@@ -209,6 +306,7 @@ const DEFAULT_WATCH_MINUTES = 10;
 const MIN_WATCH_MINUTES = 1;
 const MAX_WATCH_MINUTES = 720;
 const MAX_PHRASE = 80;
+const CACHE_BUDGET_MB = [256, 512, 1024];
 
 /**
  * A space asks for the *phone* layout by default. The pane Bop gives a space is narrow on purpose —
@@ -222,17 +320,28 @@ const DEFAULT_PHONE_LAYOUT = true;
 /**
  * What a *new* space starts on, per kind.
  *
+ * A mailbox belongs with the messaging apps here rather than with the task panels: Gmail, Outlook and
+ * the rest serve their modern web app to a desktop user agent and their *older* mobile web build to a
+ * phone one, so the phone layout is the dated interface, not the fitted one. The mobile site stays one
+ * switch away in Edit for a pane that really is too narrow.
+ *
  * A messaging service's mobile website is not its messages page. Measured with the phone user agent
  * this build used for every space (see docs/desktop.md): `tiktok.com/messages` is replaced by the For
  * You feed, `web.whatsapp.com` answers with its `/mobile/` landing page, Snapchat sends a mobile
  * landing page, and `web.skype.com` refuses the browser outright. None of those pages shows a chat or
  * can raise a message alert, which is the one thing a `social` space exists for — so social spaces
  * start on the desktop site. Task panels keep the phone layout: they are dashboards built to be tapped
- * and their mobile form fits the narrow pane.
+ * and their mobile form fits the narrow pane. AI spaces use their normal responsive layout; sign-in
+ * providers that reject embedded browsers must use the explicit system-browser fallback.
  */
 function defaultPhoneLayout(app, kind) {
   const resolved = KINDS.includes(kind) ? kind : (app && KINDS.includes(app.kind) ? app.kind : DEFAULT_KIND);
-  return resolved !== 'social';
+  // AI providers can reject embedded browsers regardless of layout. Keep the responsive layout and
+  // expose the system-browser fallback; do not change the browser identity to imply support.
+  if (resolved === 'ai') return true;
+  // Task panels are dashboards built to fit any width, so they keep the phone layout. Messaging apps and
+  // mailboxes do not: their phone build is a different, older client.
+  return resolved === 'tasks';
 }
 
 /**
@@ -245,9 +354,9 @@ function defaultPhoneLayout(app, kind) {
  * sign-in page. A site that refuses Electron refuses Bop with it, so the platform claim is kept to what
  * the engine actually is, and the only difference between the two agents is the device they claim.
  *
- * `phoneLayout` (the default) claims a phone running *this* Chromium, so the site serves the mobile
- * layout — the one built to fit an arbitrary width. The desktop agent claims the desktop it is really
- * running on, for the services whose mobile site has no messages page at all.
+ * `phoneLayout` claims a phone running *this* Chromium, so the site serves the mobile layout — the one
+ * built to fit an arbitrary width. The desktop agent claims the desktop it is really running on, for
+ * the services whose mobile site has no messages page, and for AI sign-in pages.
  */
 function userAgentFor(space, environment = {}) {
   const version = String(environment.chrome || '0');
@@ -272,8 +381,11 @@ function userAgentFor(space, environment = {}) {
 function browserRefusal(url, title) {
   if (/unsupported[_-]?browser|browser[_-]?(?:not[_-]?supported|blocked)/i.test(String(url || ''))) return true;
   const heading = String(title || '');
+  let host = '';
+  try { host = new URL(String(url || '')).hostname.toLowerCase(); } catch (_) { /* malformed URL */ }
+  if (host === 'accounts.google.com' && /400|malformed|that.s an error/i.test(heading)) return true;
   if (/this version of (?:electron|bop)/i.test(heading)) return true;
-  return /browser/i.test(heading) && /(unsupported|not supported|update|out of date|outdated|older|blocked)/i.test(heading);
+  return /browser/i.test(heading) && /(unsupported|not supported|update|out of date|outdated|older|blocked|not be secure|disallowed)/i.test(heading);
 }
 
 function watchDefaults() {
@@ -382,7 +494,7 @@ function defaultState() {
   return {
     version: STATE_VERSION,
     spaces: DEFAULT_SLOTS.map((id) => ({
-      id, label: `Account ${id}`, appId: DEFAULT_APP_ID, kind: DEFAULT_KIND, url: '', phoneLayout: defaultPhoneLayout(appOrDefault(DEFAULT_APP_ID), DEFAULT_KIND), watch: watchDefaults(),
+              id, label: `Account ${id}`, appId: DEFAULT_APP_ID, kind: DEFAULT_KIND, url: '', extraHosts: [], vip: false, phoneLayout: defaultPhoneLayout(appOrDefault(DEFAULT_APP_ID), DEFAULT_KIND), watch: watchDefaults(),
     })),
     slots: [...DEFAULT_SLOTS],
     loadedSlots: [], // Only pages the user opened are restored; new spaces do not silently sign in.
@@ -399,6 +511,9 @@ function defaultState() {
     // see [spaceView] for what that trades against.
     keepPagesAlive: true,
     monitorState: {}, // Unread metadata only. Never titles, sender names or message contents.
+    sleeping: [], // Spaces the live-page cap has released; see [spacesToSleep].
+    liveLimit: DEFAULT_LIVE_LIMIT,
+    cacheBudgetMb: 512,
     notesEnabled: false,
     notesToken: '',
     notes: [],
@@ -442,7 +557,9 @@ function enableSlot(state, id, options = {}) {
     appId: app.id,
     kind,
     url: typeof options.url === 'string' ? options.url : '',
+    vip: false,
     phoneLayout: options.phoneLayout == null ? defaultPhoneLayout(app, kind) : options.phoneLayout !== false,
+    extraHosts: normalizeExtraHosts(options.extraHosts),
     watch: watchDefaults(),
   };
   const spaces = existing ? state.spaces : [...state.spaces, created];
@@ -455,6 +572,30 @@ function disableSlot(state, id) {
   if (DEFAULT_SLOTS.includes(id) && state.slots.length <= DEFAULT_SLOTS.length) return state;
   if (!state.slots.includes(id)) return state;
   return { ...state, slots: state.slots.filter((value) => value !== id), loadedSlots: (state.loadedSlots || []).filter((value) => value !== id) };
+}
+
+/**
+ * Deletes an extra space outright: its label, app, watch rule and granted hosts are gone, and its name
+ * returns to the pool as a fresh space. The two base spaces cannot be deleted, exactly like Android.
+ *
+ * This is deliberately different from [disableSlot]: hiding is reversible and is what a user wants when
+ * they are merely done with an account for now. Deleting is for the duplicate custom panel someone added
+ * twice, and the caller is responsible for erasing that space's browser session too (main.js does it
+ * with `clearStorageData`), so "delete" really means the login is gone rather than hidden.
+ */
+function deleteSlot(state, id) {
+  if (DEFAULT_SLOTS.includes(id)) return state;
+  if (!state.spaces.some((space) => space.id === id)) return state;
+  const monitorState = { ...(state.monitorState || {}) };
+  delete monitorState[id];
+  return {
+    ...state,
+    spaces: state.spaces.filter((space) => space.id !== id),
+    slots: state.slots.filter((value) => value !== id),
+    loadedSlots: (state.loadedSlots || []).filter((value) => value !== id),
+    sleeping: (state.sleeping || []).filter((value) => value !== id),
+    monitorState,
+  };
 }
 
 function rename(state, id, label) {
@@ -471,14 +612,29 @@ function selectApp(state, id, appId, options = {}) {
     spaces: state.spaces.map((space) => {
       if (space.id !== id) return space;
       const kind = KINDS.includes(options.kind) ? options.kind : app.kind;
-      // A change of kind moves the space between the two halves of the hub, so its layout follows the
-      // new half's default. Picking another app inside the same half leaves the user's layout alone.
+      // A change of kind moves the space between the hub's groups, so its layout follows the new
+      // group's default. Picking another app inside the same group leaves the user's layout alone.
       return { ...space, appId, kind, phoneLayout: kind === space.kind ? space.phoneLayout : defaultPhoneLayout(app, kind) };
     }),
   };
 }
 
 /** Custom spaces need a real https URL before they can open anything. */
+/**
+ * Marks one space as VIP, or takes the mark away. Nothing about the space's page changes: the flag is
+ * only what makes the bubble's badge turn red while that space is waiting.
+ */
+function setVip(state, id, vip) {
+  if (!state.slots.includes(id) || !state.spaces.some((space) => space.id === id)) return state;
+  // Only a real boolean is a decision. A hand-edited or half-typed value leaves the flag alone instead of
+  // quietly clearing a mark the user made.
+  if (typeof vip !== 'boolean') return state;
+  const on = vip;
+  const current = state.spaces.find((space) => space.id === id);
+  if (current.vip === on) return state;
+  return { ...state, spaces: state.spaces.map((space) => (space.id === id ? { ...space, vip: on } : space)) };
+}
+
 function setUrl(state, id, url) {
   const value = String(url == null ? '' : url).trim().slice(0, 500);
   return { ...state, spaces: state.spaces.map((space) => (space.id === id ? { ...space, url: value } : space)) };
@@ -506,10 +662,92 @@ function setWatch(state, id, patch) {
   };
 }
 
-/** Remember explicit page opens, independently of the foreground pane. */
+/**
+ * Remember explicit page opens, independently of the foreground pane.
+ *
+ * The list is kept in *use order*, most recent last, because that order is what decides which pages stay
+ * awake once the cap below has to put some of them back to sleep. A space that is already in the list is
+ * moved to the end rather than left where it is, so opening an old space again is what makes it recent.
+ */
 function rememberLoaded(state, id) {
-  if (!state.slots.includes(id) || (state.loadedSlots || []).includes(id)) return state;
-  return { ...state, loadedSlots: [...(state.loadedSlots || []), id] };
+  if (!state.slots.includes(id)) return state;
+  const rest = (state.loadedSlots || []).filter((value) => value !== id);
+  return { ...state, loadedSlots: [...rest, id] };
+}
+
+/**
+ * How many spaces may keep a live page at once.
+ *
+ * Every live space is a whole Chromium renderer. Measured on this machine with four spaces: 12 processes
+ * and about 1.45 GB of working set — and that number only ever grew, because a space the user opened once
+ * stayed loaded for the rest of the session and every one of them was restored again after a restart. The
+ * cap is what stops that growth; the oldest pages go back to sleep instead of accumulating. Cookies,
+ * logins and watch fingerprints stay on disk, so waking a space logs back into the same account.
+ *
+ * The default is three, measured on this machine with the app's own budget check: 4 live pages held
+ * 1123 MB across 11 processes, 3 live pages 1032 MB across 10, so each sleeping page returns roughly
+ * 90 MB and one process. Three is also the smallest offered budget that still lets a user keep two social
+ * accounts and one task panel listening at the same time, which is the shape this app is bought for.
+ *
+ * A file written before [LIVE_LIMIT_VERSION] carries the old default of five, and the old default is not
+ * a choice the user made — so it is repaired once, exactly like the bubble switch in the same function.
+ *
+ * 0 means "never sleep anything", for a machine with memory to spare.
+ */
+const DEFAULT_LIVE_LIMIT = 3;
+const LIVE_LIMITS = [3, 5, 8, 0];
+
+function liveLimitOf(state) {
+  const stored = state && state.liveLimit;
+  return LIVE_LIMITS.includes(stored) ? stored : DEFAULT_LIVE_LIMIT;
+}
+
+function setLiveLimit(state, limit) {
+  const wanted = Number(limit);
+  return { ...state, liveLimit: LIVE_LIMITS.includes(wanted) ? wanted : DEFAULT_LIVE_LIMIT };
+}
+
+function setCacheBudget(state, megabytes) {
+  const wanted = Number(megabytes);
+  return { ...state, cacheBudgetMb: CACHE_BUDGET_MB.includes(wanted) ? wanted : 512 };
+}
+
+/**
+ * Which loaded spaces have to go back to sleep so the cap holds. Pure, so the policy is unit-tested.
+ *
+ * Never the space that is open, and never one whose watch is on: a sleeping page cannot be read, so
+ * sleeping a watched space would silently turn a card off. Among the rest, the ones used longest ago go
+ * first — [rememberLoaded] keeps that order — and nothing is chosen while the live count is within budget.
+ */
+function spacesToSleep(state, options) {
+  const settings = options || {};
+  const limit = settings.limit == null ? liveLimitOf(state) : Number(settings.limit);
+  if (!Number.isFinite(limit) || limit <= 0) return [];
+  const loaded = [...new Set(state.loadedSlots || [])];
+  const surplus = loaded.length - limit;
+  if (surplus <= 0) return [];
+  const keep = settings.keepId || null;
+  return loaded
+    .filter((id) => id !== keep)
+    .filter((id) => {
+      const space = accountFor(state, id);
+      return space && space.watch && space.watch.enabled !== true;
+    })
+    .slice(0, surplus);
+}
+
+/** Records the spaces the cap has put to sleep, so a card can say so instead of leaving a silent gap. */
+function markSleeping(state, ids) {
+  const list = (ids || []).filter((id) => state.slots.includes(id));
+  if (!list.length) return state;
+  const sleeping = [...new Set([...(state.sleeping || []), ...list])].filter((id) => state.slots.includes(id));
+  return { ...state, sleeping };
+}
+
+/** A space that is opened again, or stopped by hand, is not asleep any more. */
+function wake(state, id) {
+  const sleeping = (state.sleeping || []).filter((value) => value !== id);
+  return sleeping.length === (state.sleeping || []).length ? state : { ...state, sleeping };
 }
 
 /** Accept notification data only; the website cannot choose another account's id. */
@@ -546,20 +784,29 @@ function normalize(raw) {
     const storedLayout = !entry || entry.phoneLayout === undefined || entry.phoneLayout === null
       ? defaultPhoneLayout(app, kind)
       : entry.phoneLayout !== false;
+    // A mailbox saved before [MAIL_LAYOUT_VERSION] carries the old "phone fits the pane" default, not a
+    // choice the user made — and that default is Gmail's and Outlook's legacy mobile web client. Those
+    // spaces are moved to the desktop web app once, here, the same way the social spaces were moved when
+    // their phone pages turned out to have no messages view at all.
+    const layout = version >= MAIL_LAYOUT_VERSION || kind !== 'mail' ? storedLayout : false;
     spaces.push({
       id,
       label: String((entry && entry.label) || `Account ${id}`).trim().slice(0, 60) || `Account ${id}`,
       appId: app.id,
       kind,
       url: typeof (entry && entry.url) === 'string' ? String(entry.url).trim().slice(0, 500) : '',
-      phoneLayout: version >= LAYOUT_VERSION ? storedLayout : (kind === 'social' ? false : storedLayout),
+      // The VIP flag survives a restart. It only paints the badge, so a hand-edited value is read as
+      // plain true/false rather than rejecting the whole space.
+      vip: entry.vip === true,
+      extraHosts: normalizeExtraHosts(entry && entry.extraHosts),
+      phoneLayout: version >= LAYOUT_VERSION ? layout : (kind === 'social' ? false : layout),
       watch: normalizeWatch(entry && entry.watch),
     });
   }
   for (const id of DEFAULT_SLOTS) {
     if (!seen.has(id)) {
       seen.add(id);
-      spaces.push({ id, label: `Account ${id}`, appId: DEFAULT_APP_ID, kind: DEFAULT_KIND, url: '',
+      spaces.push({ id, label: `Account ${id}`, appId: DEFAULT_APP_ID, kind: DEFAULT_KIND, url: '', extraHosts: [], vip: false,
         phoneLayout: defaultPhoneLayout(appOrDefault(DEFAULT_APP_ID), DEFAULT_KIND), watch: watchDefaults() });
     }
   }
@@ -586,6 +833,11 @@ function normalize(raw) {
       const unread = raw.monitorState && raw.monitorState[id] && raw.monitorState[id].unread;
       return [id, { unread: Number.isInteger(unread) && unread >= 0 && unread <= 99 ? unread : null }];
     })),
+    sleeping: [...new Set(Array.isArray(raw.sleeping) ? raw.sleeping : [])].filter((id) => slots.includes(id) && seen.has(id)),
+    // The budget that shipped before [LIVE_LIMIT_VERSION] was five for every file, whether or not that
+    // was ever chosen, so an older file is moved to the new default once and owns the number from then on.
+    liveLimit: version >= LIVE_LIMIT_VERSION && LIVE_LIMITS.includes(raw.liveLimit) ? raw.liveLimit : DEFAULT_LIVE_LIMIT,
+    cacheBudgetMb: CACHE_BUDGET_MB.includes(Number(raw.cacheBudgetMb)) ? Number(raw.cacheBudgetMb) : 512,
     notesEnabled: raw.notesEnabled === true,
     notesToken: typeof raw.notesToken === 'string' && /^[a-f0-9]{64}$/i.test(raw.notesToken) ? raw.notesToken : '',
     notes: allNotes.filter((note) => note.deletedAt <= 0),
@@ -612,6 +864,7 @@ module.exports = {
   DEFAULT_SLOTS,
   STATE_VERSION,
   LAYOUT_VERSION,
+  MAIL_LAYOUT_VERSION,
   DEFAULT_WATCH_MINUTES,
   MIN_WATCH_MINUTES,
   MAX_WATCH_MINUTES,
@@ -634,6 +887,12 @@ module.exports = {
   appOrDefault,
   hexColor,
   hostsFor,
+  normalizeHost,
+  normalizeExtraHosts,
+  grantHost,
+  revokeHost,
+  deleteSlot,
+  MAX_EXTRA_HOSTS,
   hostnameOf,
   hostAllowed,
   homeFor,
@@ -646,6 +905,16 @@ module.exports = {
   nearestBubbleSize,
   setBubblePref,
   defaultState,
+  DEFAULT_LIVE_LIMIT,
+  LIVE_LIMIT_VERSION,
+  LIVE_LIMITS,
+  liveLimitOf,
+  setLiveLimit,
+  CACHE_BUDGET_MB,
+  setCacheBudget,
+  spacesToSleep,
+  markSleeping,
+  wake,
   accountFor,
   enabledSpaces,
   sortedSlots,
@@ -655,6 +924,7 @@ module.exports = {
   rename,
   selectApp,
   setUrl,
+  setVip,
   setPhoneLayout,
   setWatch,
   normalize,

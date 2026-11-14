@@ -1,0 +1,83 @@
+{
+  "kind": "Android device verification on an emulator (not a physical phone)",
+  "device": {
+    "serial": "emulator-5554",
+    "model": "sdk_gphone16k_x86_64",
+    "android": "17",
+    "api": 37,
+    "abi": "x86_64 (16 KB page size image)"
+  },
+  "build": {
+    "apk": "app/build/outputs/apk/debug/app-debug.apk",
+    "install": "adb install -r (Success, in-place upgrade over the previous install)",
+    "instrumentedNotificationProvider": "tools/notifier-fixture (applicationId com.whatsapp, posts Notification.MessagingStyle with category msg)"
+  },
+  "checks": [
+    {
+      "check": "install, first launch, disclosure, hub render",
+      "commands": ["adb install -r", "adb shell am start -n com.example.twoaccmess/.MainActivity", "adb shell uiautomator dump"],
+      "result": "passed",
+      "detail": "Disclosure accepted; hub rendered 'bop', 'Alerts on', '2 spaces / 1 apps'."
+    },
+    {
+      "check": "notification ingestion from an observed package (matrix row 1 on hardware)",
+      "commands": ["adb shell am broadcast -a com.whatsapp.FIXTURE_POST -p com.whatsapp", "adb shell dumpsys notification --noredact"],
+      "result": "passed",
+      "detail": "Hub posted NotificationRecord pkg=com.example.twoaccmess tag=hub-account-C id=102 with InboxStyle, title 'Account C has messages in 2 chats' and lines 'Sam: hello C', 'Sam: hello one'. Slot C was bound to WhatsApp through the picker; the fixture notification carried no account id of its own."
+    },
+    {
+      "check": "swipe/dismiss acknowledgement",
+      "commands": ["adb shell cmd statusbar expand-notifications", "tap the card's Dismiss action"],
+      "result": "passed",
+      "detail": "Hub card for C removed; source notifications untouched."
+    },
+    {
+      "check": "listener revocation and re-grant does not resurrect a dismissed card (D5 on hardware)",
+      "commands": ["adb shell cmd notification disallow_listener com.example.twoaccmess/com.example.twoaccmess.HubNotificationListener", "adb shell cmd notification allow_listener ..."],
+      "result": "passed",
+      "detail": "After reconnect the dismissed card did not return (0 hub cards). A new fixture message afterwards posted exactly one new card, so ingestion still worked after the reconnect."
+    },
+    {
+      "check": "POST_NOTIFICATIONS revoked: alert recorded, no card (matrix row 15 on hardware)",
+      "commands": ["adb shell pm revoke com.example.twoaccmess android.permission.POST_NOTIFICATIONS", "post fixture message"],
+      "result": "passed",
+      "detail": "0 hub cards while the permission was denied."
+    },
+    {
+      "check": "POST_NOTIFICATIONS re-granted: pending alert becomes visible again",
+      "commands": ["adb shell pm grant com.example.twoaccmess android.permission.POST_NOTIFICATIONS", "adb shell am start -n com.example.twoaccmess/.MainActivity"],
+      "result": "failed before this change, passed after",
+      "detail": "Before: 0 cards after returning to the hub, and none appeared until a later message arrived. After HubNotifications.restore on resume: the card is re-posted silently (1 card) and the already-delivered alert is visible outside the app again."
+    },
+    {
+      "check": "Doze / forced deep idle (matrix row 11 on hardware)",
+      "commands": ["adb shell dumpsys deviceidle force-idle", "post fixture message", "adb shell dumpsys deviceidle unforce"],
+      "result": "passed",
+      "detail": "dumpsys deviceidle reported IDLE; the next message still produced a hub card (1)."
+    },
+    {
+      "check": "process death and restore",
+      "commands": ["adb shell am kill com.example.twoaccmess", "adb shell am start -n com.example.twoaccmess/.MainActivity"],
+      "result": "passed",
+      "detail": "Hub relaunched with the same 3 spaces / 2 apps and 'Alerts on'; no Java crash in the crash buffer. One native SIGILL was recorded in :messenger_c inside libwebviewchromium (WebViewChromium.onTrimMemory) while that background slot was being reclaimed; see limitations."
+    },
+    {
+      "check": "reboot with multiple spaces (matrix row 12 on hardware)",
+      "commands": ["adb reboot", "adb wait-for-device", "am start MainActivity"],
+      "result": "passed",
+      "detail": "After boot: 3 spaces / 2 apps, notification access still granted, hub installed without waiting for a tap, no crash."
+    },
+    {
+      "check": "space binding persisted",
+      "commands": ["adb shell run-as com.example.twoaccmess cat files/space-index.json", "adb shell run-as com.example.twoaccmess ls shared_prefs"],
+      "result": "passed",
+      "detail": "space-index.json = [{A,messenger},{B,messenger},{C,whatsapp}]; shared_prefs contains web-space-C.xml, i.e. each slot keeps its own preferences file."
+    }
+  ],
+  "limitations": [
+    "An emulator is not a physical phone: OEM battery managers, real Doze calibration, real WebView builds and real provider notifications are not exercised.",
+    "The fixture posts under com.whatsapp with a synthetic MessagingStyle notification; it proves the listener, filter, attribution, card and permission paths, not WhatsApp's own notification format.",
+    "No web slot was signed in, so the web-title path (WebUnread -> WebAlertReceiver) was covered by JVM tests only.",
+    "One native SIGILL (signal 4, libwebviewchromium WebViewChromium.onTrimMemory) occurred in :messenger_c while the background slot's process was being reclaimed after an am kill. It did not reproduce on a plain launch, and no app frame appears in the tombstone; it is recorded here rather than claimed fixed."
+  ]
+}

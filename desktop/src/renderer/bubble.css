@@ -91,6 +91,10 @@ html, body {
    the user agent's `display: none`. */
 .picture[hidden] { display: none; }
 
+/* Two states, one badge. Ordinary waiting cards are a blue disc with black digits; the moment a space
+   the user marked VIP is waiting, the disc turns red and the digits turn white — the same numbers, a
+   colour that means something. Values include their contrast against each other: black on #1976d2 is
+   4.79:1 and white on #d32f2f is 4.63:1, both above WCAG AA at this size. */
 .badge {
   position: absolute;
   top: -1px;
@@ -99,11 +103,24 @@ html, body {
   height: 21px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--lime);
-  color: var(--ink);
+  background: #1976d2;
+  color: #000000;
   font: 800 11px/21px 'Segoe UI', system-ui, sans-serif;
   text-align: center;
   box-shadow: 0 1px 5px rgba(20, 17, 32, 0.45), 0 0 0 2px rgba(255, 255, 255, 0.6);
   pointer-events: none;
+  /* A short fade so an arrival is noticed without the badge jumping; reduce-motion turns it off. */
+  transition: background-color 140ms ease, color 140ms ease;
 }
 .badge[hidden] { display: none; }
+
+/* A VIP arrival outranks the ordinary colour completely: there is one badge, and a VIP that arrived
+   must never be hidden behind a blue disc because other accounts are also waiting. */
+.badge[data-tone='vip'] {
+  background: #d32f2f;
+  color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge { transition: none; }
+}

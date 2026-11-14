@@ -24,9 +24,36 @@ const ORIGIN = `http://127.0.0.1:${HTTP_PORT}`;
 const ELECTRON = path.join(DESKTOP, 'node_modules', 'electron', 'dist', 'electron.exe');
 const APP = APP_ARG;
 const DRAG_SCRIPT = path.join(__dirname, 'os-drag.ps1');
+const WINDOW_AT = path.join(__dirname, 'window-at.ps1');
+const LIST_BOPS = path.join(__dirname, 'bop-processes.ps1');
 
 function pointer(args) {
   return spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', DRAG_SCRIPT, ...args], { encoding: 'utf8' }).stdout.trim();
+}
+
+/** The window that owns a point on the desktop, as the machine itself reports it. */
+function windowAt(x, y, shot) {
+  const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', WINDOW_AT, '-X', String(x), '-Y', String(y)];
+  if (shot) args.push('-Shot', shot);
+  try { return JSON.parse(spawnSync('powershell', args, { encoding: 'utf8' }).stdout.trim() || 'null'); }
+  catch { return null; }
+}
+
+/** Every Bop copy running on this machine, main processes only (tools/bop-processes.ps1). */
+function runningBops() {
+  const output = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', LIST_BOPS], { encoding: 'utf8' }).stdout.trim();
+  return output.split(/\r?\n/).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter((entry) => entry && entry.port > 0);
+}
+
+/**
+ * What this run's own app costs right now: the working set of every process started with its data directory,
+ * in MB. The RAM claim for this round is a number of megabytes returned by a sleeping page, and a number
+ * that only ever appeared in a console log is not evidence — so the acceptance run measures it on the app it
+ * just started, before and after a page goes to sleep.
+ */
+function appMemory() {
+  const output = spawnSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', LIST_BOPS, '-Containing', USER_DATA, '-MemoryMb'], { encoding: 'utf8' }).stdout.trim();
+  try { return JSON.parse(output); } catch { return { memoryMb: 0, processes: 0 }; }
 }
 const steps = [];
 function record(name, detail, ok = true) {
@@ -118,19 +145,23 @@ function writeProfile(userData) {
   fs.mkdirSync(userData, { recursive: true });
   const watch = { enabled: false, minutes: 1, selector: '', require: '', ignore: '', fingerprint: null, lastCheckAt: 0, lastChangeAt: 0, failures: 0 };
   const space = (id, label, appId, kind, url, patch, enabled = false) => ({ id, label, appId, kind, url, enabled, phoneLayout: kind === 'tasks', watch: { ...watch, ...(patch || {}) } });
+  // Four spaces, all with a real address and all remembered as open: this is the profile that makes the
+  // two claims measurable — the hub must be usable before any page is fetched, and the pages must arrive
+  // one at a time rather than all at once.
   const state = {
     version: 4,
-    spaces: [space('A', 'Account A', 'messenger', 'social', '', null), space('B', 'Account B', 'messenger', 'social', '', null),
+    spaces: [space('A', 'Extra A', 'custom', 'social', `${ORIGIN}/chat-a.html`, null, true),
+      space('B', 'Extra B', 'custom', 'social', `${ORIGIN}/chat-b.html`, null, true),
       space('C', 'Live board', 'custom', 'tasks', BOARD_URL, { enabled: true, minutes: 1, selector: '#list' }, true),
       space('D', 'Live chat', 'custom', 'social', CHAT_URL, null, true)],
-    slots: ['A', 'B', 'C', 'D'], loadedSlots: ['C', 'D'], theme: 'system', bubble: true,
+    slots: ['A', 'B', 'C', 'D'], loadedSlots: ['A', 'B', 'C', 'D'], theme: 'system', bubble: true,
     notes: [], notesEnabled: true, notesToken: '1234567890abcdef'.repeat(4),
     // Keep the acceptance bubble away from an already-running Bop user's always-on-top bubble.
     bubblePrefs: { size: 64, opacity: 100, doubleClick: 'menu', overFullscreen: true, spotX: 0.72, spotY: 0.35 },
     watchWhileRunning: true, messageSound: true, monitorState: {},
   };
   state.slots = ['A', 'B', 'C', 'D'];
-  state.loadedSlots = ['C', 'D'];
+  state.loadedSlots = ['A', 'B', 'C', 'D'];
   state.notesEnabled = true;
   state.notesToken = '1234567890abcdef'.repeat(4);
   fs.writeFileSync(path.join(userData, 'bop-settings.bin'), Buffer.concat([Buffer.from('BOP0'), Buffer.from(JSON.stringify(state))]));
@@ -159,8 +190,17 @@ async function main() {
     record('port-free', `something is already listening on ${CDP_PORT}; choose another --cdp-port`, false);
     process.exitCode = 1; return;
   }
+  // A Bop copy this run did not start is named before it is blamed for anything: two Bop bubbles on the same
+  // 64px spot are indistinguishable from a broken drag — measured with two copies, where a real drag moved
+  // the older bubble the full 210 points and the newer one not at all — and a leftover copy from an
+  // interrupted run is exactly what made an earlier acceptance run read a working drag as a broken one.
+  const others = runningBops().filter((copy) => copy.port !== CDP_PORT);
+  if (others.length) record('other-bops', JSON.stringify(others.map((copy) => ({ pid: copy.pid, port: copy.port, acceptance: copy.acceptance, userData: copy.userData }))));
   const server = await startServer();
   writeProfile(userData);
+  // The clock for the startup claim: everything below is reported against the moment the executable was
+  // handed to the operating system, which is the moment the user's click happened.
+  const launchAt = Date.now();
   const child = launch(userData);
   let ok = false;
   const dashboardTarget = async () => {
@@ -188,6 +228,60 @@ async function main() {
       return childDashboard ? child : null;
     }, APP ? 90000 : 45000);
     record('app-started', `${APP || 'source tree'} · ${list.length} targets`);
+
+    // The startup claim, from the app's own clock. A launch that loaded every remembered space inside
+    // `whenReady` shows the hub only after the last site answered; the fix is an ordering in time, so the
+    // app records it (see recordStartup in main.js) and this reads the record rather than racing DevTools
+    // round trips against a machine that may still be unpacking the portable copy.
+    // Four spaces are remembered on this profile and the shipped budget is three, so the launch fetches
+    // three pages and leaves the fourth asleep. The pages that count here are the ones the *launch* asked
+    // for — the app tags every fetch with who wanted it, because this run opens spaces of its own later
+    // and those pages are not the launch's.
+    await step('hub-before-pages', async () => {
+      const timeline = await until('the launch timeline', () => {
+        try {
+          const record = JSON.parse(fs.readFileSync(path.join(OUT, 'startup.json'), 'utf8'));
+          if (!record.hubLoadedAt || !record.restore) return null;
+          // The record is complete once every space the launch planned to fetch has an entry — whoever
+          // ended up fetching it. The run itself opens a space while the launch is still working through
+          // its list (see [space-loaded]), and the page it asked for is then not the launch's fetch, so
+          // counting *restore*-sourced entries against the plan would wait for something that never comes.
+          const started = record.pageLoadStartedAt || {};
+          return record.restore.waking.every((id) => started[id]) ? record : null;
+        } catch { return null; }
+      }, APP ? 120000 : 60000, 150);
+      const all = Object.entries(timeline.pageLoadStartedAt).map(([id, value]) => ({ id, at: value.at, source: value.source }));
+      const pages = all.filter((page) => page.source === 'restore');
+      const first = Math.min(...pages.map((page) => page.at));
+      const last = Math.max(...pages.map((page) => page.at));
+      const detail = {
+        // Both clocks are this machine's, so these two include everything the launcher did first.
+        launchToHubMs: timeline.hubLoadedAt - launchAt,
+        launchToFirstPageMs: first - launchAt,
+        hubLoadedAfterAppStartMs: timeline.hubLoadedAt - timeline.startedAt,
+        firstPageAfterHubMs: first - timeline.hubLoadedAt,
+        pagesAfterHubMs: Object.fromEntries(pages.map((page) => [page.id, page.at - timeline.hubLoadedAt])),
+        pagesFetched: pages.length,
+        budget: timeline.restore.limit, waking: timeline.restore.waking, asleep: timeline.restore.asleep,
+        openedLater: all.filter((page) => page.source !== 'restore').map((page) => `${page.id}:${page.source}`),
+        spreadMs: last - first,
+      };
+      const claimed = new Set(timeline.restore.waking);
+      const unplanned = pages.filter((page) => !claimed.has(page.id));
+      if (unplanned.length) {
+        throw new Error(`the launch fetched a page it never said it would: ${JSON.stringify({ unplanned, ...detail })}`);
+      }
+      if (timeline.restore.limit > 0 && timeline.restore.waking.length > timeline.restore.limit) {
+        throw new Error(`the launch fetched more pages than the budget allows: ${JSON.stringify(detail)}`);
+      }
+      if (timeline.restore.waking.length + timeline.restore.asleep.length !== 4) {
+        throw new Error(`the launch did not account for every remembered space: ${JSON.stringify(detail)}`);
+      }
+      if (first < timeline.hubLoadedAt) throw new Error(`a space page was fetched before the hub had loaded: ${JSON.stringify(detail)}`);
+      if (first - timeline.hubLoadedAt < 300) throw new Error(`the hub got almost no head start over the pages: ${JSON.stringify(detail)}`);
+      if (last - first < 500) throw new Error(`the remembered spaces were fetched together instead of one at a time: ${JSON.stringify(detail)}`);
+      return JSON.stringify(detail);
+    });
 
     await step('dashboard-ipc', async () => {
       const snapshot = await evaluate(await dashboardTarget(), 'window.bop.snapshot()');
@@ -236,14 +330,34 @@ async function main() {
       let grab = null;       // the pointer-to-window offset the grab was made with
       let wanted = null;     // where the hand actually ended, so the window must be exactly that far along
       let moved = 0;
+      let press = null;      // where the machine's pointer was told to press, kept for the failure report
       // The gesture is the operating system's own pointer, which is the only way to prove a window drag.
+      //
+      // That also means it lands on whoever owns the desktop at that point, so a foreign full-screen
+      // overlay swallows it whole and the bubble looks broken. Measured on this machine: Windows' own dim
+      // layer (`Shell_SystemDim`, owned by `PickerHost.exe`) while a security or file-picker prompt was up,
+      // which failed this step twice in a row with "the bubble did not follow the pointer at all". Waiting
+      // for the desktop to belong to the app under test measures the gesture's precondition — the assertion
+      // below is untouched — and a run that still fails names the covering window instead of the bubble.
+      const ownProcess = APP ? path.basename(APP, path.extname(APP)) : 'electron';
+      const clearBy = Date.now() + 60000;
+      let cover = null;
+      do {
+        const spot = await evaluate(target, '({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })');
+        cover = windowAt(Math.round(spot.x + 5), Math.round(spot.y + spot.h / 2));
+        if (cover && cover.process === ownProcess) break;
+        if (Date.now() < clearBy) await sleep(1000);
+      } while (Date.now() < clearBy);
+      const coveredBy = cover && cover.process !== ownProcess
+        ? `the desktop at the bubble's grab point was covered by ${cover.process} (${cover.class}) for 60s, so the gesture could not reach it`
+        : null;
       // A freshly written EXE can swallow the very first one — measured twice on this machine, on the first
       // launch after a build, while every CDP-driven step around it passed — so the same gesture is
       // repeated a bounded number of times, with the same requirement each time it is sent.
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         before = await evaluate(target, '({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })');
         // The center is the button, not a drag surface; grab the rim as an actual user would.
-        const press = { x: Math.round(before.x + 5), y: Math.round(before.y + before.h / 2) };
+        press = { x: Math.round(before.x + 5), y: Math.round(before.y + before.h / 2) };
         pointer(['-X1', String(press.x), '-Y1', String(press.y), '-X2', String(press.x + delta.x), '-Y2', String(press.y + delta.y)]);
         await sleep(600);
         after = await evaluate(target, '({ x: window.screenX, y: window.screenY, w: window.outerWidth, h: window.outerHeight })');
@@ -258,7 +372,14 @@ async function main() {
       }
       try {
         if (after.w !== before.w || after.h !== before.h) throw new Error(`the drag changed the bubble size ${JSON.stringify({ before, after })}`);
-        if (moved <= 50) throw new Error(`the bubble did not follow the pointer at all ${JSON.stringify({ before, after })}`);
+        if (moved <= 50) {
+          // "It did not move" is not a measurement: who received the gesture is. The window under the press
+          // point, its owning process and a picture of the desktop are what turn a mystery into a finding
+          // (a Bop copy this run did not start, sitting on the same spot, is the case that has happened).
+          const under = press ? windowAt(press.x, press.y, path.join(OUT, 'drag-blocked.png')) : null;
+          if (coveredBy) throw new Error(`${coveredBy} ${JSON.stringify({ before, after, under })}`);
+          throw new Error(`the bubble did not follow the pointer at all ${JSON.stringify({ before, after, under })}`);
+        }
         const offBy = Math.abs(after.x - wanted.x) + Math.abs(after.y - wanted.y);
         if (offBy > 4) throw new Error(`the bubble is not under the hand that dropped it: ${JSON.stringify({ before, after, wanted, grab, offBy })}`);
         const dashboard = await dashboardTarget();
@@ -285,8 +406,13 @@ async function main() {
       const raised = await evaluate(await spaceTarget('/chat.html'), `(() => { const n = new Notification('Live check', { body:'hello from the page', tag:'live-1' }); return { body:n.body, silent:n.silent }; })()`);
       const alert = await until('web notification alert', async () => (await evaluate(await dashboardTarget(), 'window.bop.snapshot()')).alerts.find((item) => item.kind === 'web' && item.spaceId === 'D'), 15000);
       const card = await until('reminder card', () => windowTarget('/renderer/alert.html'), 15000);
-      const text = await until('reminder contents', () => evaluate(card, 'document.getElementById("card")?.innerText.replace(/\\s+/g," ").trim()').catch(() => ''), 15000, 200);
-      if (!text.includes(SPACE_D_LABEL) || !text.includes('hello from the page')) throw new Error(text);
+      // Wait for the card to carry *this* message rather than for the window to exist: the window is shown
+      // on the frame that draws the payload, and the check must not accept a card that is still blank.
+      const text = await until('reminder contents', async () => {
+        const value = await evaluate(card, 'document.getElementById("card")?.innerText.replace(/\\s+/g," ").trim()').catch(() => '');
+        return value && value.includes(SPACE_D_LABEL) ? value : null;
+      }, 15000, 200);
+      if (!text.includes('hello from the page')) throw new Error(text);
       await screenshot(card, path.join(OUT, 'card.png'));
       return JSON.stringify({ raised, title: alert.title, card: text.slice(0, 100) });
     });
@@ -344,6 +470,33 @@ async function main() {
       await sleep(ms);
       return evaluate(target, '(() => { clearInterval(window.__bopTimer); return { ticks:window.__bopTicks, state:document.visibilityState, hidden:document.hidden }; })()');
     };
+    // The bubble's panel is the surface a user reads to answer "which account moved?", and the answer has
+    // to keep coming while the panel is open — a card that froze at the moment it was opened would look
+    // exactly like an account that went quiet. Acknowledging one account's cards from the dashboard is a
+    // state change the main process pushes to every window (the same broadcast the bubble's own badge
+    // follows), so the panel must show it without being closed and reopened.
+    await step('bubble-panel-live', async () => {
+      const bubble = await windowTarget('/renderer/bubble.html');
+      if (!bubble) throw new Error('no bubble window to click');
+      await evaluate(bubble, 'window.bop.bubble.click(); true');
+      const menu = await until('the space menu', () => windowTarget('/renderer/menu.html'), 10000, 150);
+      const rows = () => evaluate(menu, `Array.from(document.querySelectorAll('[data-open]')).map((button) => ({ id: button.dataset.open, badge: button.querySelector('.badge')?.textContent || null, text: button.innerText.replace(/\\s+/g, ' ').trim() }))`);
+      const before = await until('a rendered panel', async () => {
+        const value = await rows().catch(() => []);
+        return value.length ? value : null;
+      }, 10000, 200);
+      const waiting = before.find((row) => row.badge) || null;
+      if (!waiting) throw new Error(`the panel shows nothing waiting for any account: ${JSON.stringify(before)}`);
+      if (!waiting.text) throw new Error(`the panel row for ${waiting.id} has no readable state: ${JSON.stringify(waiting)}`);
+      await evaluate(await dashboardTarget(), `window.bop.acknowledgeAll("${waiting.id}")`);
+      const after = await until('the panel to follow the accounts', async () => {
+        const value = await rows().catch(() => null);
+        return value && !(value.find((row) => row.id === waiting.id) || {}).badge ? value : null;
+      }, 8000, 200);
+      await evaluate(menu, 'window.bop.menu.close()');
+      return JSON.stringify({ cleared: waiting.id, before: waiting, after: after.find((row) => row.id === waiting.id) });
+    });
+
     await step('pane-unthrottled-when-open', async () => {
       const dashboard = await dashboardTarget(); await evaluate(dashboard, 'window.bop.openSpace("C")'); await sleep(1200);
       const open = await evaluate(dashboard, 'window.bop.snapshot().then(s=>s.enabled.filter(v=>v.open).map(v=>v.id))');
@@ -365,6 +518,74 @@ async function main() {
       if (page.page !== 'settings' || page.open || !page.text.includes('Settings') || snapshot.enabled.some((space) => space.open) || !paneText) throw new Error(JSON.stringify({ page, paneText }));
       await screenshot(dashboard, path.join(OUT, 'settings-while-space-open.png')); return JSON.stringify({ page, paneText });
     });
+    // The memory claim, on the running app: the page budget is three by default, so four remembered
+    // spaces on a fresh profile keep three live pages and the oldest goes to sleep — no renderer, no site
+    // process — while the space itself stays remembered. Asked for a bigger budget through the same IPC
+    // the settings button uses, the sleeping space comes straight back; that pair is what the RAM number
+    // below is measured across, and it is why the default is three rather than the old five.
+    await step('pane-budget', async () => {
+      const dashboard = await dashboardTarget();
+      const isPage = (target) => target.type === 'page' && target.url.startsWith(ORIGIN);
+      const pages = async () => (await targets()).filter(isPage).length;
+      const before = await evaluate(dashboard, 'window.bop.snapshot()');
+      if (before.liveLimit !== 3 || before.sleeping.length !== 1) {
+        throw new Error(`a fresh profile must keep three of these four pages awake: ${JSON.stringify({ limit: before.liveLimit, sleeping: before.sleeping })}`);
+      }
+      const pagesBefore = await pages();
+      const memoryBefore = appMemory();
+      const sleptRow = before.enabled.find((space) => space.id === before.sleeping[0]);
+      if (!sleptRow || !sleptRow.sleeping || sleptRow.loaded) {
+        throw new Error(`the sleeping space does not read as asleep: ${JSON.stringify(sleptRow)}`);
+      }
+      // A bigger budget is a setting: choosing it wakes what the smaller one slept, which is the whole
+      // point — the page came back from disk, with its cookies, and nothing had to be signed in again.
+      await evaluate(dashboard, 'window.bop.setPreference("liveLimit", 5)');
+      const awake = await until('the sleeping page came back', async () => {
+        const next = await evaluate(dashboard, 'window.bop.snapshot()');
+        return next.sleeping.length === 0 ? next : null;
+      }, 30000, 250);
+      const pagesAwake = await pages();
+      if (pagesAwake !== pagesBefore + 1) {
+        throw new Error(`a woken space did not fetch its page again: ${JSON.stringify({ pagesBefore, pagesAwake, limit: awake.liveLimit })}`);
+      }
+      const memoryAwake = appMemory();
+      // And back down to the default, so the measurement below is the same policy the app ships with.
+      await evaluate(dashboard, 'window.bop.setPreference("liveLimit", 3)');
+      const slept = await until('a page went to sleep', async () => {
+        const next = await evaluate(dashboard, 'window.bop.snapshot()');
+        return next.sleeping.length ? next : null;
+      }, 15000, 200);
+      const pagesAfter = await pages();
+      const memoryAfter = appMemory();
+      const row = slept.enabled.find((space) => space.id === slept.sleeping[0]);
+      const detail = {
+        limit: slept.liveLimit, asleep: slept.sleeping, pages: [pagesBefore, pagesAfter],
+        workingSetMb: [memoryBefore.memoryMb, memoryAfter.memoryMb], processes: [memoryBefore.processes, memoryAfter.processes],
+        fourLivePages: { mb: memoryAwake.memoryMb, processes: memoryAwake.processes },
+        row: row && { loaded: row.loaded, sleeping: row.sleeping },
+      };
+      if (slept.liveLimit !== 3 || slept.sleeping.length !== 1) throw new Error(`the smaller budget was not applied: ${JSON.stringify(detail)}`);
+      if (pagesAfter !== pagesAwake - 1) throw new Error(`a sleeping space kept its page alive: ${JSON.stringify({ pagesAwake, pagesAfter, ...detail })}`);
+      if (!row || !row.sleeping || row.loaded) throw new Error(`the sleeping space does not read as asleep: ${JSON.stringify(detail)}`);
+      if (slept.enabled.some((space) => space.watch.enabled && space.sleeping)) throw new Error('a watched space was put to sleep: its card would stop silently');
+      // Waking, through the same call the hub's Open button makes. The budget is a *count*, so the space
+      // that comes back takes the pane of another one: four open spaces stay three live pages, and the
+      // proof is that the total does not move while the space that was asleep is the one now loaded.
+      const wokenId = slept.sleeping[0];
+      await evaluate(dashboard, `window.bop.openSpace("${wokenId}")`);
+      const woken = await until('the sleeping space came back', async () => {
+        const next = await evaluate(dashboard, 'window.bop.snapshot()');
+        const awake = next.enabled.find((space) => space.id === wokenId);
+        return awake && awake.loaded && !awake.sleeping ? next : null;
+      }, 30000, 250);
+      const pagesWoken = await pages();
+      if (pagesWoken !== slept.liveLimit) throw new Error(`waking a space must swap the budget, not spend more of it: ${JSON.stringify({ ...detail, wokenId, pagesWoken })}`);
+      if (!woken.sleeping.length || woken.sleeping.includes(wokenId)) {
+        throw new Error(`a woken space drew no sleeping space in its place: ${JSON.stringify({ asleep: woken.sleeping, wokenId })}`);
+      }
+      return JSON.stringify({ ...detail, wokenId, pagesWoken, asleepNow: woken.sleeping });
+    });
+
     await step('tray-and-dashboard', async () => {
       const state = await evaluate(await dashboardTarget(), 'window.bop.snapshot()');
       if (!state.tray || !state.dashboardVisible) throw new Error(JSON.stringify({ tray: state.tray, dashboardVisible: state.dashboardVisible }));
@@ -388,9 +609,20 @@ async function main() {
     ok = steps.every((item) => item.ok);
   } catch (failure) { record('run', failure.stack || String(failure), false); }
   finally {
-    if (!KEEP) spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    let cleanup = null;
+    if (!KEEP) {
+      spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      // The launcher is not always the app: a portable EXE unpacks itself and runs the real Bop from %TEMP%,
+      // so the tree can outlive the process this run started. Anything still carrying this run's DevTools port
+      // is this run's app and is killed by PID — a leftover copy on the same bubble spot is what made an
+      // earlier acceptance run read a working drag as a broken one.
+      const leftovers = runningBops().filter((copy) => copy.port === CDP_PORT);
+      for (const copy of leftovers) spawnSync('taskkill', ['/PID', String(copy.pid), '/T', '/F'], { stdio: 'ignore' });
+      cleanup = { port: CDP_PORT, leftovers: leftovers.map((copy) => ({ pid: copy.pid, name: copy.name })) };
+      if (leftovers.length) process.stdout.write(`ok   app-gone: killed ${leftovers.length} leftover process(es) this run started\n`);
+    }
     server.close();
-    fs.writeFileSync(path.join(OUT, 'live-check.json'), JSON.stringify({ ok, steps }, null, 2));
+    fs.writeFileSync(path.join(OUT, 'live-check.json'), JSON.stringify({ ok, steps, cleanup }, null, 2));
     process.stdout.write(`${ok ? 'LIVE CHECK OK' : 'LIVE CHECK FAILED'} · ${steps.filter((item) => !item.ok).length} failed · report ${path.join(OUT, 'live-check.json')}\n`);
     process.exitCode = ok ? 0 : 1;
   }

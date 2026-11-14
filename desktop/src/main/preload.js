@@ -21,10 +21,18 @@ contextBridge.exposeInMainWorld('bop', {
 
   addSpace: (request) => ipcRenderer.invoke('bop:add-space', request || {}),
   removeSpace: (id) => ipcRenderer.invoke('bop:remove-space', id),
+  // Irreversible: the space and its isolated browser session are both erased.
+  deleteSpace: (id) => ipcRenderer.invoke('bop:delete-space', id),
+  revokeHost: (id, host) => ipcRenderer.invoke('bop:revoke-host', id, host),
+  // The answer to the sign-in permission card; main resumes the held navigation when allowed.
+  respondHostPermission: (requestId, allow) => ipcRenderer.invoke('bop:host-permission', requestId, allow === true),
+  onHostRequest: (handler) => ipcRenderer.on('bop:host-request', (_event, request) => handler(request)),
   rename: (id, label) => ipcRenderer.invoke('bop:rename', id, label),
   selectApp: (id, appId, kind) => ipcRenderer.invoke('bop:select-app', id, appId, kind),
   setUrl: (id, url) => ipcRenderer.invoke('bop:set-url', id, url),
   setWatch: (id, patch) => ipcRenderer.invoke('bop:set-watch', id, patch),
+  // Marks a mailbox/account as VIP: its waiting cards turn the bubble's badge red with white digits.
+  setVip: (id, vip) => ipcRenderer.invoke('bop:set-vip', id, vip === true),
   setPhoneLayout: (id, on) => ipcRenderer.invoke('bop:set-phone-layout', id, on === true),
   setPreference: (key, value) => ipcRenderer.invoke('bop:set-preference', key, value),
   setBubble: (patch) => ipcRenderer.invoke('bop:set-bubble', patch || {}),
@@ -33,6 +41,8 @@ contextBridge.exposeInMainWorld('bop', {
   clearBubbleAvatar: () => ipcRenderer.invoke('bop:clear-bubble-avatar'),
 
   openSpace: (id) => ipcRenderer.invoke('bop:open-space', id),
+  openAiInBrowser: (id) => ipcRenderer.invoke('bop:open-ai-in-browser', id),
+  openSiteInBrowser: (id) => ipcRenderer.invoke('bop:open-site-in-browser', id),
   // The dashboard's dialogs are drawn by this renderer, which sits *below* the space panes in the
   // window; the main process raises it while a dialog is open so the dialog is clickable, not just
   // visible. See applyViewOrder in main.js.
@@ -58,6 +68,8 @@ contextBridge.exposeInMainWorld('bop', {
   reminder: {
     open: (spaceId, key) => ipcRenderer.send('bop:reminder-open', { spaceId, key }),
     hide: () => ipcRenderer.send('bop:reminder-hide'),
+    // The card asks for its own show once the frame it drew carries the message; see [deliverReminder].
+    painted: () => ipcRenderer.send('bop:reminder-painted'),
   },
   onReminder: (handler) => ipcRenderer.on('bop:reminder', (_event, card) => handler(card)),
 

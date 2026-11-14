@@ -36,3 +36,14 @@ __pycache__/
 
 # JVM replay log written by Android Studio runs.
 replay_pid*.log
+
+# Harness output written by the verification runs.
+desktop/dist-smoke/
+desktop/dist-retry/
+desktop/retry-run.log
+desktop/smoke-run.log
+
+# The standalone notifier fixture is a tool; only its sources belong in the repository.
+tools/notifier-fixture/build/
+tools/notifier-fixture/.gradle/
+tools/notifier-fixture/local.properties

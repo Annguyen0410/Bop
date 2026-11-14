@@ -19,8 +19,12 @@
 const POPUP_MS = 9000;
 /** Gap to the work-area edge. The taskbar is already excluded by the work area itself. */
 const MARGIN = 18;
-/** Message alerts and watched-page changes are reminders; blocked links and load errors are not. */
-const KINDS = ['web', 'watch'];
+/**
+ * Message alerts, watched-page changes and monitoring failures are reminders; blocked links and ordinary
+ * load errors are not. A health card is rare by construction — it is raised once when an account stops
+ * being watched — and it is the one failure the user cannot discover any other way, so it earns the card.
+ */
+const KINDS = ['web', 'watch', 'health'];
 
 function popsUp(alert) {
   return !!alert && KINDS.includes(alert.kind);

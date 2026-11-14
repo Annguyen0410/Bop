@@ -1,0 +1,40 @@
+{
+  "olderAtStart": {
+    "x": 1382,
+    "y": 361
+  },
+  "newerAtStart": {
+    "x": 1382,
+    "y": 361
+  },
+  "press": {
+    "x": 1387,
+    "y": 393
+  },
+  "sameSpot": true,
+  "moved": {
+    "older": 210,
+    "newer": 0
+  },
+  "before": {
+    "older": {
+      "x": 1382,
+      "y": 361
+    },
+    "newer": {
+      "x": 1382,
+      "y": 361
+    }
+  },
+  "after": {
+    "older": {
+      "x": 1502,
+      "y": 451
+    },
+    "newer": {
+      "x": 1382,
+      "y": 361
+    }
+  },
+  "killed": 12
+}

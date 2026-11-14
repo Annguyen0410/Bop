@@ -18,6 +18,21 @@ const esc = (value) => String(value == null ? '' : value)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+/**
+ * Monitoring states in words a user can act on. The raw status is an implementation word ("observing-auth-
+ * unknown"), and the two states that mean an account has gone quiet have to read as a request, not as code.
+ * Anything unknown keeps its raw value so a new state is never hidden.
+ */
+const MONITORING_WORD = {
+  'not-loaded': 'Not watched yet · press Open',
+  loading: 'Loading…',
+  'observing-auth-unknown': 'Watching · sign-in state not verified',
+  'reauthentication-required': 'Sign-in required · press Open',
+  'temporarily-unavailable': 'Connection lost · retrying',
+  'monitoring-stopped': 'Monitoring stopped · press Open to resume',
+};
+const monitoringWord = (space) => MONITORING_WORD[space.monitoring] || space.monitoring;
+
 const ago = (at) => {
   const seconds = Math.max(0, Math.round((Date.now() - at) / 1000));
   if (seconds < 60) return `${seconds}s ago`;
@@ -65,6 +80,8 @@ function renderSpaceList() {
   const target = el('space-list');
   const groups = [
     ['social', 'Social accounts'],
+    ['mail', 'Mail accounts'],
+    ['ai', 'AI accounts'],
     ['tasks', 'Work & task panels'],
   ];
   let html = '';
@@ -92,6 +109,11 @@ function renderSpaceList() {
 
 function card(space) {
   const pending = space.pending ? `<span class="badge">${space.pending}</span>` : '';
+  // The flag is shown on the card because it only ever shows up in the bubble's colour; without a
+  // label here the user has no way to tell which space is turning it red.
+  const vip = space.vip
+    ? '<span class="row-status vip" title="VIP: a waiting card in this space turns the bubble\'s badge red with white digits">★ VIP</span>'
+    : '';
   const broken = space.openable === false
     ? `<span class="row-status bad" title="${esc(space.openError || '')}">needs an address</span>`
     : '';
@@ -102,16 +124,20 @@ function card(space) {
   const watching = space.watch && space.watch.enabled
     ? `<span class="row-status ok" title="Watched every ${space.watch.minutes} min${space.watch.require ? `; only alerts when the page says “${esc(space.watch.require)}”` : ''}">◉ watching${filter}</span>` : '';
   const checked = space.watch && space.watch.lastCheckAt ? `checked ${ago(space.watch.lastCheckAt)}` : 'never checked';
+  // The two starter spaces are permanent on both builds, so only extra spaces (task, social or AI)
+  // offer deletion. Deleting is different from hiding: the caller erases the session too.
+  const deletable = space.id !== 'A' && space.id !== 'B';
   return `
     <div class="card" data-card="${esc(space.id)}">
       <div class="card-head">
         <span class="space-dot" style="background:${esc(space.accent)};margin-top:5px"></span>
         <div style="flex:1;min-width:0">
-          <h3>${esc(space.label)} ${pending} ${broken}</h3>
+          <h3>${esc(space.label)} ${pending} ${vip} ${broken}</h3>
           <p>${esc(space.hosts[0] || 'no address set')} · slot ${esc(space.id)}</p>
         </div>
       </div>
-      <p class="space-app">${esc(space.monitoring)}${space.unread == null ? '' : ` · ${space.unread} title unread`}</p>
+      <p class="space-app">${esc(monitoringWord(space))}${space.unread == null ? '' : ` · ${space.unread} title unread`}</p>
+      ${space.sleeping ? '<p class="space-app">Asleep: its sign-in and cookies are kept, the page itself was released to keep memory flat. Open wakes it.</p>' : ''}
       <p class="space-app">${space.loaded ? 'Tab-title events + website alerts; authentication and live delivery are not validated.' : 'Open once to resume monitoring with saved session cookies.'}</p>
       ${space.browserNote ? `<p class="space-app warn">${esc(space.browserNote)}</p>` : ''}
       ${space.notificationStatus ? `<p class="space-app">${esc(space.notificationStatus)}</p>` : ''}
@@ -121,6 +147,7 @@ function card(space) {
         <button class="ghost" data-watch="${esc(space.id)}">Watch</button>
         <button class="ghost" data-edit="${esc(space.id)}">Edit</button>
         ${space.loaded ? `<button class="ghost" data-stop="${esc(space.id)}">Stop monitoring</button>` : ''}
+        ${deletable ? `<button class="ghost" data-delete="${esc(space.id)}" title="Delete this space and its saved login">Delete</button>` : ''}
       </div>
     </div>`;
 }
@@ -135,6 +162,8 @@ function renderPage() {
 
 function renderSpaces() {
   const social = state.enabled.filter((space) => space.kind === 'social');
+  const mail = state.enabled.filter((space) => space.kind === 'mail');
+  const ai = state.enabled.filter((space) => space.kind === 'ai');
   const tasks = state.enabled.filter((space) => space.kind === 'tasks');
   const watched = state.enabled.filter((space) => space.watch && space.watch.enabled).length;
   el('main').innerHTML = `
@@ -142,13 +171,15 @@ function renderSpaces() {
       <div class="eyebrow">YOUR LITTLE INTERNET</div>
       <h1>All your people.<br />One happy place.</h1>
       <div class="hero-row">
-        <span class="count">${state.enabled.length} spaces · ${social.length} social · ${tasks.length} task · ${watched} watched</span>
+        <span class="count">${state.enabled.length} spaces · ${social.length} social · ${mail.length} mail · ${ai.length} AI · ${tasks.length} task · ${watched} watched</span>
         <button class="pill" id="hero-add">＋ Add</button>
       </div>
     </section>
     ${social.length ? `<div class="section-title"><h2>Social</h2><span>${social.length}</span></div><div class="grid">${social.map(card).join('')}</div>` : ''}
+    ${mail.length ? `<div class="section-title"><h2>Mail</h2><span>${mail.length}</span></div><div class="grid">${mail.map(card).join('')}</div>` : ''}
+    ${ai.length ? `<div class="section-title"><h2>AI accounts</h2><span>${ai.length}</span></div><div class="grid">${ai.map(card).join('')}</div>` : ''}
     ${tasks.length ? `<div class="section-title"><h2>Tasks &amp; earnings</h2><span>${tasks.length}</span></div><div class="grid">${tasks.map(card).join('')}</div>` : ''}
-    ${state.enabled.length ? '' : '<div class="empty" style="margin-top:22px">No spaces yet. Add one — a message account or a task panel.</div>'}
+    ${state.enabled.length ? '' : '<div class="empty" style="margin-top:22px">No spaces yet. Add one — a message account, an AI account or a task panel.</div>'}
     <div class="note">
       <b>Desktop-only:</b> a watched space is re-read every ${state.enabled.find((s) => s.watch && s.watch.enabled)?.watch?.minutes || 10} minutes
       (its own interval when set) and cards you when the page changes. This is the part the Android build cannot do,
@@ -207,6 +238,8 @@ function alertCard(alert) {
 
 function renderSettings() {
   const v = state.versions;
+  const cacheBudgets = Array.isArray(state.cacheBudgets) ? state.cacheBudgets : [256, 512, 1024];
+  const cacheBudgetMb = [256, 512, 1024].includes(state.cacheBudgetMb) ? state.cacheBudgetMb : 512;
   el('main').innerHTML = `
     <div class="section-title"><h2>Settings</h2><span>Small tweaks</span></div>
 
@@ -269,10 +302,22 @@ function renderSettings() {
         <button class="${state.startAtLogin ? 'primary' : 'ghost'}" id="toggle-autostart" ${state.autoStart.supported ? '' : 'disabled'}>${state.startAtLogin ? 'Starts with the computer' : 'Does not start with the computer'}</button>
         <button class="${state.keepPagesAlive ? 'primary' : 'ghost'}" id="toggle-keepalive">${state.keepPagesAlive ? 'Pages run at full speed' : 'Pages are throttled'}</button>
       </div>
+      <div class="field"><label for="live-limit">Pages kept running at once</label>
+        <div class="card-actions">
+          ${state.liveLimits.map((limit) => `<button class="${state.liveLimit === limit ? 'primary' : 'ghost'}" data-live-limit="${limit}">${limit === 0 ? 'All of them' : `${limit} pages`}</button>`).join('')}
+        </div>
+      </div>
+      <div class="field"><label>Disposable browser-cache budget</label>
+        <div class="card-actions">
+          ${cacheBudgets.map((limit) => `<button class="${cacheBudgetMb === limit ? 'primary' : 'ghost'}" data-cache-budget="${limit}">${limit} MB</button>`).join('')}
+        </div>
+      </div>
       <dl class="kv">
         <dt>Start-up entry</dt><dd>${state.autoStart.registered ? 'registered with Windows' : (state.autoStart.supported ? 'not registered' : 'installed build only')}${state.autoStart.portable ? ' · portable copy' : ''}</dd>
         <dt>Tray</dt><dd>${state.tray ? 'running — left-click shows or hides this window' : 'not available on this system'}</dd>
         <dt>Dashboard</dt><dd>${state.dashboardVisible ? 'visible' : 'hidden; every space keeps listening'}</dd>
+        <dt>Live pages</dt><dd>${state.liveLimit === 0 ? `every opened space (${state.sleeping.length} asleep)` : `${state.liveLimit} at a time · ${state.sleeping.length ? `${esc(state.sleeping.join(', '))} asleep` : 'nothing asleep'}`}</dd>
+        <dt>Browser cache</dt><dd>${state.cacheUsageMb || 0} MB / ${cacheBudgetMb} MB${state.cacheBudgetOver ? ' · cleanup could not meet the budget' : ''}</dd>
       </dl>
       ${state.autoStart.error ? `<div class="note warn">${esc(state.autoStart.error)}</div>` : ''}
       <div class="note">
@@ -282,11 +327,24 @@ function renderSettings() {
         with the tray and the bubble only, so nothing opens over what you are doing.
       </div>
       <div class="note">
+        A page that is open but not looked at is the only part of Bop whose cost grows with use, so the pages
+        above the limit go to sleep: the pane is closed, the space's own cookies, logins and watch readings
+        stay on disk, and a space is never put to sleep while its watch is on, because a sleeping page cannot
+        be read. Opening a sleeping space — here, from the tray or from the bubble — wakes it, and the next
+        launch starts with the pages you had open, first the hub and then one page at a time.
+      </div>
+      <div class="note">
         Full speed keeps each page's own timers and connections running while it sits in a background pane,
         which is what lets a chat page notice a message at all. A page that then believes it is on screen may
         show its own badge instead of a notification, so the tab title stays the primary source Bop reads.
         Switching it off restores the system default for a background tab: timers clamped to about one per
         second while the page is not being looked at.
+      </div>
+      <div class="note">
+        Bop measures the Chromium HTTP cache across spaces and removes least-recently-used cache entries
+        when the selected budget is exceeded. Cookies, sign-ins and website storage are preserved. Chromium
+        does not offer a per-write disk quota, so a busy page can pass the budget temporarily until cleanup.
+        Portable launch files are separately kept to one fixed unpack folder; abandoned old copies are swept.
       </div>
     </div>
 
@@ -361,6 +419,12 @@ function renderSettings() {
   }
   el('toggle-autostart').addEventListener('click', async () => { await window.bop.setPreference('startAtLogin', !state.startAtLogin); await refresh(); });
   el('toggle-keepalive').addEventListener('click', async () => { await window.bop.setPreference('keepPagesAlive', !state.keepPagesAlive); await refresh(); });
+  for (const button of el('main').querySelectorAll('[data-live-limit]')) {
+    button.addEventListener('click', async () => { await window.bop.setPreference('liveLimit', Number(button.dataset.liveLimit)); await refresh(); });
+  }
+  for (const button of el('main').querySelectorAll('[data-cache-budget]')) {
+    button.addEventListener('click', async () => { await window.bop.setPreference('cacheBudgetMb', Number(button.dataset.cacheBudget)); await refresh(); });
+  }
   el('toggle-message-sound').addEventListener('click', async () => { await window.bop.setPreference('messageSound', !state.messageSound); await refresh(); });
   el('toggle-watch').addEventListener('click', async () => { await window.bop.setPreference('watchWhileRunning', !state.watchWhileRunning); await refresh(); });
   el('check-now-2').addEventListener('click', async () => { await window.bop.checkNow(); await refresh(); });
@@ -370,7 +434,7 @@ function renderSettings() {
 }
 
 const GUIDE = [
-  ['01 / Two kinds of space', 'A social space is a messaging account. A task space is a work or earning panel. They behave the same way — separate cookies, separate logins — but a task space is usually worth watching, because a study that opens while you are away can be gone in minutes.'],
+  ['01 / Three kinds of space', 'A social space is a messaging account. An AI space is one login to ChatGPT, Claude or Gemini. A task space is a work or earning panel. They behave the same way — separate cookies, separate logins — but a task space is usually worth watching, because a study that opens while you are away can be gone in minutes.'],
   ['02 / Why watching works here', 'On the desktop a page keeps a live connection and its own notifications work, so Bop can also read a page again after you have walked away. The Android build cannot do this: a closed WebView receives no push, which is why it only reacts to notifications the phone already received.'],
   ['03 / What a watch card means', 'The first reading of a page never creates a card — otherwise every newly watched page would fire one. After that, a card appears only when the page text actually changes. Whitespace-only differences are ignored, and a failed read (offline, signed out) is never reported as a change.'],
   ['04 / Point the watch at the right part', 'By default the whole page body is compared, which works but is noisy on a busy page. Put a CSS selector in the watch settings — for example #jobs, .studies, main — and only that part is compared. If the selector matches nothing, Bop quietly falls back to the whole body.'],
@@ -383,6 +447,7 @@ const GUIDE = [
   ['11 / Linked notes', 'Desktop and Android can share quick notes and images over the same private Wi‑Fi. Turn LAN sync on in Desktop Settings, keep both apps open on that network, and pair Android with the shown private address and token. Sync is end-to-end encrypted with a one-time random token, with no Internet relay or cloud storage. Anyone on your private network who gets the token can read the notes, so keep it private and stop sync to revoke it.'],
   ['12 / Moving between sections and external bubbles', 'Spaces, Alerts, Notes, Settings and Guide in the sidebar always switch, including while a space is open: the space steps aside and keeps running in the background pane, session and monitoring intact, so leaving it never needs the ✕. The Bop bubble opens Bop spaces and shows their pending alerts. It cannot accept or embed chat bubbles or windows owned by another application. There is no drag-in feature for external bubbles.'],
   ['13 / Honest limits', 'A watched space is only read while Bop is running — there is no background service that survives quitting the app. Reading a page cannot see a change that happened and reverted between two checks. Panels can change their layout, which can cause one noisy card; fix it by setting a narrower selector. And no site is scraped: only title and body text are compared, and no credentials or messages are extracted.'],
+  ['14 / AI accounts, side by side', 'Add ChatGPT, Claude or Gemini once per account. Each AI space has its own cookies and storage, so accounts remain separate when the site supports sign-in inside an embedded browser. Google blocks OAuth in embedded browsers. Edit an AI space and choose Open AI site in browser to use the official site there; that browser session does not sync back into Bop. Bop does not spoof browser identity or copy authentication cookies.'],
 ];
 
 function renderGuide() {
@@ -430,13 +495,17 @@ function openPicker() {
     const apps = state.apps.filter((app) => app.kind === kind);
     openModal(`
       <h2>A new little space</h2>
-      <p class="hint">Pick what this space is for. Social accounts and task panels are kept in separate groups.</p>
+      <p class="hint">Pick what this space is for. Social accounts, mailboxes, AI accounts and task panels are kept in separate groups.</p>
       <div class="card-actions">
         <button class="${kind === 'social' ? 'primary' : 'ghost'}" data-kind="social">Social account</button>
+        <button class="${kind === 'mail' ? 'primary' : 'ghost'}" data-kind="mail">Mail account</button>
+        <button class="${kind === 'ai' ? 'primary' : 'ghost'}" data-kind="ai">AI account</button>
         <button class="${kind === 'tasks' ? 'primary' : 'ghost'}" data-kind="tasks">Task / earning panel</button>
       </div>
+      ${kind === 'mail' ? '<div class="note">One space is one mailbox. Add Gmail twice and sign in with a different Google account in each; every space keeps its own cookies, so the two mailboxes never share a session. Providers own their sign-in and may refuse an embedded browser — the space says so on its card and offers Open site in browser.</div>' : ''}
+      ${kind === 'ai' ? '<div class="note">One space is one AI login. Add ChatGPT, Claude or Gemini twice and sign in with a different account in each — then switch by opening the space you want.</div>' : ''}
       <div class="app-grid">
-        ${apps.map((app) => `<button class="app-choice" data-app="${esc(app.id)}"><div class="app-name">${esc(app.label)}</div><div class="app-kind">${esc(app.kind)}</div></button>`).join('')}
+        ${apps.map((app) => `<button class="app-choice" data-app="${esc(app.id)}"><div class="app-name">${esc(app.label)}</div><div class="app-kind">${esc(app.kind === 'ai' ? 'AI account' : app.kind)}</div></button>`).join('')}
       </div>
       <div class="card-actions"><button class="ghost" id="cancel">Cancel</button></div>`);
     for (const button of modal.querySelectorAll('[data-kind]')) {
@@ -511,16 +580,24 @@ function openEdit(id, note = null) {
     <div class="field"><label for="edit-kind">Group</label>
       <select id="edit-kind">
         <option value="social" ${space.kind === 'social' ? 'selected' : ''}>Social account</option>
+        <option value="mail" ${space.kind === 'mail' ? 'selected' : ''}>Mail account</option>
+        <option value="ai" ${space.kind === 'ai' ? 'selected' : ''}>AI account</option>
         <option value="tasks" ${space.kind === 'tasks' ? 'selected' : ''}>Task / earning panel</option>
       </select>
     </div>
+    <div class="field"><label for="edit-vip"><input type="checkbox" id="edit-vip" ${space.vip ? 'checked' : ''} /> VIP — a waiting card here turns the bubble's badge red with white digits</label></div>
     <div class="field"><label for="edit-layout">Which website the space loads</label>
       <select id="edit-layout">
-        <option value="desktop" ${space.phoneLayout ? '' : 'selected'}>Desktop site — the real chat and its notifications${space.kind === 'social' ? ' (default)' : ''}</option>
+        <option value="desktop" ${space.phoneLayout ? '' : 'selected'}>Desktop site — the real chat and its notifications${space.kind !== 'tasks' ? ' (default)' : ''}</option>
         <option value="phone" ${space.phoneLayout ? 'selected' : ''}>Mobile site — fits this window${space.kind === 'tasks' ? ' (default)' : ''}</option>
       </select>
     </div>
     ${space.appId === 'custom' ? `<div class="field"><label for="edit-url">Address</label><input id="edit-url" value="${esc(space.url)}" /></div>` : ''}
+    ${space.extraHosts && space.extraHosts.length ? `
+    <div class="field"><label>Sign-in sites you allowed</label>
+      <div class="card-actions">${space.extraHosts.map((host) => `<button class="ghost" data-revoke-host="${esc(host)}" title="Block this host again">${esc(host)} ✕</button>`).join('')}</div>
+      <div class="note">These were granted one at a time when a sign-in page tried to open. Removing one blocks that host again; the next sign-in asks you instead of opening it.</div>
+    </div>` : ''}
     <h3 style="margin-top:16px">Watching</h3>
     <div class="field"><label for="edit-watch"><input type="checkbox" id="edit-watch" ${space.watch.enabled ? 'checked' : ''} /> Watch this page for changes</label></div>
     <div class="field"><label for="edit-minutes">Minutes between checks</label>
@@ -531,12 +608,17 @@ function openEdit(id, note = null) {
       <input id="edit-require" placeholder="available" value="${esc(space.watch.require)}" /></div>
     <div class="field"><label for="edit-ignore">Stay quiet when the page contains (optional)</label>
       <input id="edit-ignore" placeholder="ads, sponsored" value="${esc(space.watch.ignore)}" /></div>
-    <div class="note">${esc(app ? app.login : '')}</div>
+    <div class="note">${esc(app ? app.login : '')} If a sign-in page lives on another domain, Bop now asks before opening it and remembers your answer for this space only.</div>
+    ${space.browserNote && space.kind !== 'ai' ? `<div class="note">${esc(space.browserNote)}</div>` : ''}
+    ${space.kind === 'ai' ? '<div class="note">Google and some identity providers block sign-in inside embedded browsers. Open the official home page in your system browser and start a fresh sign-in there; do not retry an old Google callback URL. That browser session will not sync into this Bop space.</div>' : ''}
     <div class="card-actions" style="margin-top:14px">
       <button class="primary" id="save">Save</button>
       <button class="ghost" id="reload">Reload page</button>
+      ${space.kind === 'ai' ? '<button class="ghost" id="open-ai-browser">Open AI site in browser</button>' : ''}
+      ${space.browserNote && space.kind !== 'ai' ? '<button class="ghost" id="open-site-browser">Open site in browser</button>' : ''}
       <button class="ghost" id="clear">Clear session</button>
-      <button class="danger" id="remove">Remove space</button>
+      <button class="ghost" id="remove">Hide space</button>
+      ${space.id !== 'A' && space.id !== 'B' ? '<button class="danger" id="delete">Delete space</button>' : ''}
       <button class="ghost" id="cancel">Cancel</button>
     </div>`);
   // The reason this dialog opened is usually a missing or refused address, so the field that fixes it
@@ -544,11 +626,29 @@ function openEdit(id, note = null) {
   if (note && el('edit-url')) el('edit-url').focus();
   el('cancel').addEventListener('click', closeModal);
   el('reload').addEventListener('click', async () => { await window.bop.reloadSpace(id); });
+  if (el('open-ai-browser')) el('open-ai-browser').addEventListener('click', async () => {
+    const result = await window.bop.openAiInBrowser(id);
+    if (!result?.ok) alert(result?.error || 'The site could not be opened in your browser.');
+  });
+  if (el('open-site-browser')) el('open-site-browser').addEventListener('click', async () => {
+    const result = await window.bop.openSiteInBrowser(id);
+    if (!result?.ok) alert(result?.error || 'The site could not be opened in your browser.');
+  });
   el('clear').addEventListener('click', async () => { await window.bop.clearSpace(id); });
   el('remove').addEventListener('click', async () => { await window.bop.removeSpace(id); closeModal(); await refresh(); });
+  if (el('delete')) el('delete').addEventListener('click', () => { closeModal(); confirmDelete(id); });
+  for (const button of modal.querySelectorAll('[data-revoke-host]')) {
+    button.addEventListener('click', async () => {
+      await window.bop.revokeHost(id, button.dataset.revokeHost);
+      await refresh();
+      closeModal();
+      openEdit(id);
+    });
+  }
   el('save').addEventListener('click', async () => {
     await window.bop.rename(id, el('edit-label').value);
     await window.bop.selectApp(id, el('edit-app').value, el('edit-kind').value);
+    await window.bop.setVip(id, el('edit-vip').checked);
     // Changing the layout reloads the page, which is the point: the site picks a layout per request.
     await window.bop.setPhoneLayout(id, el('edit-layout').value === 'phone');
     if (space.appId === 'custom' && el('edit-url')) await window.bop.setUrl(id, el('edit-url').value);
@@ -559,6 +659,59 @@ function openEdit(id, note = null) {
       require: el('edit-require').value,
       ignore: el('edit-ignore').value,
     });
+    closeModal();
+    await refresh();
+  });
+}
+
+/**
+ * The sign-in permission card. A task panel's login usually continues on another domain, and the old
+ * rule silently handed that page to the system browser — so the space never received the cookie that
+ * proves the login. This asks once per host, per space, and the answer is written into that space.
+ */
+function askHostPermission(request) {
+  if (!request || !request.requestId) return;
+  // A page can start a sign-in while another dialog is open. The permission card is the one question
+  // that must not be missed, so it replaces that dialog rather than hiding behind it.
+  if (modal) closeModal();
+  openModal(`
+    <h2>Allow ${esc(request.host)}?</h2>
+    <p class="hint">${esc(request.label)} is trying to open its ${esc(request.reason || 'sign-in page')} on another site.</p>
+    <div class="note">Panels often sign in through Google, Microsoft or their own login domain. Allowing
+      <b>${esc(request.host)}</b> lets this one space finish that sign-in with its saved cookies. It does not
+      open that site for any other space, and you can remove the grant later in Edit.</div>
+    <div class="field"><label>Page that asked</label><code>${esc(request.url)}</code></div>
+    <div class="card-actions">
+      <button class="primary" id="host-allow">Allow ${esc(request.host)}</button>
+      <button class="ghost" id="host-deny">Don't allow</button>
+    </div>`);
+  el('host-allow').addEventListener('click', async () => {
+    closeModal();
+    await window.bop.respondHostPermission(request.requestId, true);
+    await refresh();
+  });
+  el('host-deny').addEventListener('click', async () => {
+    closeModal();
+    await window.bop.respondHostPermission(request.requestId, false);
+    await refresh();
+  });
+}
+
+/** Deleting is for a duplicate task panel or an account that is really gone; it erases the login too. */
+function confirmDelete(id) {
+  const space = state.spaces.find((value) => value.id === id) || state.enabled.find((value) => value.id === id);
+  if (!space) return;
+  openModal(`
+    <h2>Delete ${esc(space.label)}?</h2>
+    <p class="hint">The space is removed for good, and its own browser session — cookies, cache and saved login — is erased.</p>
+    <div class="note">Only this space is touched. Use <b>Hide space</b> instead if you want it out of the list but keep its login for later.</div>
+    <div class="card-actions">
+      <button class="danger" id="delete-confirm">Delete for good</button>
+      <button class="ghost" id="delete-cancel">Cancel</button>
+    </div>`);
+  el('delete-cancel').addEventListener('click', closeModal);
+  el('delete-confirm').addEventListener('click', async () => {
+    await window.bop.deleteSpace(id);
     closeModal();
     await refresh();
   });
@@ -602,7 +755,7 @@ function openWatch(id) {
 
 // --- wiring ----------------------------------------------------------------------------------
 function onClick(event) {
-  const target = event.target.closest('[data-open],[data-edit],[data-watch],[data-ack],[data-stop],#close-space,#new-space');
+  const target = event.target.closest('[data-open],[data-edit],[data-watch],[data-ack],[data-stop],[data-delete],#close-space,#new-space');
   if (!target) return;
   if (target.id === 'new-space') return openPicker();
   if (target.id === 'close-space') return void window.bop.closeSpace().then(refresh);
@@ -619,6 +772,8 @@ function onClick(event) {
   if (edit) return openEdit(edit);
   const watch = target.getAttribute('data-watch');
   if (watch) return openWatch(watch);
+  const remove = target.getAttribute('data-delete');
+  if (remove) return confirmDelete(remove);
   const ack = target.getAttribute('data-ack');
   if (ack) return void window.bop.acknowledge(ack).then(refresh);
 }
@@ -645,5 +800,6 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
 
 window.bop.onChanged((next) => { state = next; render(); });
 window.bop.onFocusSpace((id) => { page = 'alerts'; render(); });
+window.bop.onHostRequest(askHostPermission);
 
 refresh().then(() => setInterval(() => { if (page === 'alerts') render(); }, 30_000));
