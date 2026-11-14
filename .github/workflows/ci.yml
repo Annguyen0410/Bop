@@ -89,3 +89,25 @@ jobs:
             app/build/reports/lint-results-*.html
           if-no-files-found: ignore
           retention-days: 7
+
+  website:
+    name: Website (build and tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Install
+        run: npm ci
+      # The build also validates the output: one h1, real alt text, sized images, no external
+      # subresources, no unresolved placeholders and no broken local reference.
+      - name: Build and validate
+        run: npm run build
+      - name: Site tests
+        run: npm test

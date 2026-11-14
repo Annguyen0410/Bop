@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bop — social card</title>
+<style>
+  @font-face {
+    font-family: "Bricolage Grotesque";
+    src: url("../assets/fonts/bricolage-grotesque-latin.woff2") format("woff2");
+    font-weight: 400 800;
+    font-display: block;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    inline-size: 1200px;
+    block-size: 630px;
+    background: #d9f56e;
+    color: #171320;
+    font-family: "Bricolage Grotesque", sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(to right, rgba(23,19,32,.14) 1px, transparent 1px);
+    background-size: 100px 100%;
+    opacity: .5;
+  }
+  .frame { position: absolute; inset: 34px; border: 2px solid #171320; border-radius: 22px; }
+  .top { position: absolute; inset: 62px 68px auto 68px; display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 16px; font-size: 54px; font-weight: 800; letter-spacing: -.05em; }
+  .mark { inline-size: 68px; block-size: 68px; }
+  .kicker { font-family: ui-monospace, monospace; font-size: 15px; letter-spacing: .16em; text-transform: uppercase; }
+  h1 {
+    position: absolute;
+    inset: 190px 68px auto 68px;
+    font-size: 92px;
+    font-weight: 800;
+    line-height: .94;
+    letter-spacing: -.045em;
+  }
+  h1 span { background: #171320; color: #d9f56e; padding: 0 6px; }
+  .bottom {
+    position: absolute;
+    inset: auto 68px 62px 68px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 40px;
+  }
+  .lede { font-size: 25px; line-height: 1.25; max-width: 20ch; font-weight: 500; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; max-width: 34rem; }
+  .chip {
+    border: 2px solid #171320;
+    border-radius: 999px;
+    padding: 9px 16px;
+    font-family: ui-monospace, monospace;
+    font-size: 15px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .bubble { position: absolute; inline-size: 132px; inset: auto 68px 150px auto; }
+  .bubble .badge {
+    position: absolute; top: -10px; right: -10px;
+    inline-size: 48px; block-size: 48px;
+    display: grid; place-items: center;
+    background: #d63044; color: #fff;
+    border: 4px solid #d9f56e;
+    border-radius: 999px;
+    font-weight: 800; font-size: 22px;
+  }
+</style>
+</head>
+<body>
+  <div class="grid" aria-hidden="true"></div>
+  <div class="frame" aria-hidden="true"></div>
+  <div class="top">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect width="40" height="40" rx="11" fill="#6d51c4"></rect>
+        <path d="M12 11h16a5 5 0 0 1 5 5v7a5 5 0 0 1-5 5h-7.4L15 32v-4h-3a5 5 0 0 1-5-5v-7a5 5 0 0 1 5-5Z" fill="#d9f56e"></path>
+        <circle cx="16.6" cy="19" r="1.7" fill="#171320"></circle>
+        <circle cx="23.4" cy="19" r="1.7" fill="#171320"></circle>
+        <path d="M16 22.4c1.7 1.7 6.3 1.7 8 0" fill="none" stroke="#171320" stroke-width="1.6" stroke-linecap="round"></path>
+        <path d="M32 5.5 33 9l3.5 1-3.5 1-1 3.5-1-3.5L27.5 10 31 9Z" fill="#fff"></path>
+      </svg>
+      bop
+    </div>
+    <p class="kicker">Your little internet</p>
+  </div>
+
+  <h1>All your people.<br><span>One happy place.</span></h1>
+
+  <div class="bottom">
+    <p class="lede">Many accounts. One quiet hub. A separate browser session for every space.</p>
+    <div class="chips">
+      <span class="chip">Windows</span>
+      <span class="chip">Android</span>
+      <span class="chip">No server</span>
+    </div>
+  </div>
+
+  <svg class="bubble" viewBox="0 0 64 64" aria-hidden="true">
+    <circle cx="32" cy="32" r="31" fill="#6d51c4"></circle>
+    <circle cx="32" cy="32" r="25" fill="#d9f56e"></circle>
+    <circle cx="24" cy="29" r="2.7" fill="#171320"></circle>
+    <circle cx="40" cy="29" r="2.7" fill="#171320"></circle>
+    <path d="M23 37c3.4 4 14.6 4 18 0" fill="none" stroke="#171320" stroke-width="2.6" stroke-linecap="round"></path>
+    <circle class="badge-bg" cx="58" cy="8" r="12" fill="#d63044" stroke="#d9f56e" stroke-width="3"></circle>
+    <text x="58" y="13" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="800" fill="#fff">3</text>
+  </svg>
+</body>
+</html>

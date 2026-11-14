@@ -148,7 +148,7 @@ full history lives in [docs/desktop.md](docs/desktop.md) and [docs/verification.
 | Desktop retry ladder, end to end (23 Oct) | **ok: true**: six real failed navigations at the production 30/60/120/240/480 s backoff, "stopped being monitored" at **930.9 s** with one card and one OS notification, and a working load clears it silently | [retry-smoke.json](docs/evidence/major-update/retry-smoke.json), `npx electron . --bop-retry-smoke` |
 | Android JVM tests (23 Oct) | **142 passed**, 0 failed, including listener-reconnect isolation | `./gradlew :app:testDebugUnitTest` |
 | Android on an emulator (23 Oct, Android 17 / API 37) | 10 checks, 0 failed: a real `MessagingStyle` notification from a bound slot became one card, a dismissal survived a listener revoke/re-grant, forced deep idle still ingested a message, `am kill` and a full reboot restored 3 spaces, and revoking then granting `POST_NOTIFICATIONS` now brings the pending alert back (it did not before) | [android-device.json](docs/evidence/major-update/android-device.json), fixture in [tools/notifier-fixture](tools/notifier-fixture) |
-| CI (23 Oct) | added [`.github/workflows/ci.yml`](.github/workflows/ci.yml): desktop `npm ci` + syntax + `npm test` on Windows, Android `testDebugUnitTest` + `assembleDebug` on Linux. The same commands pass locally; GitHub has not run it yet | `.github/workflows/ci.yml` |
+| CI | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs desktop `npm ci` + syntax + `npm test` on Windows, Android `testDebugUnitTest` + `assembleDebug` on Linux, and the website build + tests. The Android job failed on GitHub until 14 Nov: the wrapper was committed without its executable bit, so `./gradlew` exited 126 at 0 s. The job now sets the bit, installs compileSdk 37 when the image lacks it, and uploads test reports on every run | `.github/workflows/ci.yml` |
 | Desktop functional smoke, real Electron (23 Oct) | **ok: true**, 51 steps: window/tray, panes, dialogs above panes, theme, reminder card, bubble drag by real gesture, both accounts notifying while the hub is hidden, `[1,1]` same-origin sessions, sign-in grant, delete space, settings UI | [source-smoke.json](docs/evidence/major-update/source-smoke.json) |
 | Desktop **source tree 0.2.1**, 48-step smoke | **ok: true**, 48 steps, `missingFiles: []` | [source-smoke-022.json](docs/evidence/desktop-portable/source-smoke-022.json) |
 | Desktop **source tree 0.2.1**, 19-step live check | **19/19**, 0 failed | [live-check-022.json](docs/evidence/desktop-portable/live-check-022.json) |
@@ -216,6 +216,22 @@ export JAVA_HOME='/c/Program Files/Android/Android Studio/jbr'   # Git Bash / An
 ./gradlew :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest --console=plain
 ```
 
+```bash
+# Website — static HTML/CSS/JS, no framework
+cd website
+npm ci
+npm run dev                                        # http://127.0.0.1:4173
+npm run build                                      # -> website/dist, validated
+npm test                                           # build, badge rules, budgets
+npm run check:browser                              # real Chrome: layout, demo, dialog, contrast
+SITE_URL=https://your.domain npm run build         # canonical URL, absolute og:image, sitemap
+```
+
+The site explains the product rather than restating the README: the switching problem, what a space
+is, an interactive model of the bubble's badge rules (labelled a simulation), the app's real
+limitations, and links to the four `v0.2.8` release assets. Every screenshot is a real capture from
+`docs/`; no store link, licence or signed build is invented. See [website/README.md](website/README.md).
+
 For release signing, copy [keystore.properties.example](keystore.properties.example) to the ignored
 `keystore.properties` and fill in your upload-key settings. The release build publishes under
 `com.twoaccmess.hub` by default; override `publishApplicationId` with your own reverse-domain ID before a
@@ -230,6 +246,7 @@ first store publication. The Android build ships **English only** on purpose
 | [`app/`](app) | The Android app (Kotlin, Compose) |
 | [`docs/`](docs) | Behaviour, limits and the verification log — including [PRIVACY.md](docs/PRIVACY.md) |
 | [`docs/evidence/`](docs/evidence) | Raw output behind every claim: smoke reports, live-check reports, captures |
+| [`website/`](website) | The product site: one static page, a zero-dependency build, site tests and Chrome checks |
 | [`experiments/`](experiments) | Standalone probes and lab rooms, none of them part of either app |
 | [`tools/notifier-fixture/`](tools/notifier-fixture) | A standalone verification app that installs as `com.whatsapp` so the Android alert path can be exercised on an emulator without a real account. Not part of any release |
 | [`assets/`](assets) | Icon and avatar |

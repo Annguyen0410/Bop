@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    // Only here to apply a stored appearance before first paint. The site works without it.
+    try {
+      var stored = localStorage.getItem("bop-appearance");
+      if (stored === "light" || stored === "dark") {
+        document.querySelector('meta[name="color-scheme"]').content = stored;
+      }
+    } catch (error) { /* storage can be blocked; the system preference still applies */ }
+  </script>
+
+  <title>Bop — many accounts, one quiet hub</title>
+  <meta name="description" content="Bop keeps several messaging and web accounts apart on one device. Every space gets its own browser session on Windows and Android — no logging out, no profile juggling, no server.">
+  <!-- The build removes this line unless SITE_URL is set, so a local build never claims a domain. -->
+  <link rel="canonical" href="__SITE_URL__/">
+  <meta name="author" content="Bop">
+  <meta name="theme-color" content="#f6f2e7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14121c" media="(prefers-color-scheme: dark)">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Bop">
+  <meta property="og:title" content="Bop — many accounts, one quiet hub">
+  <meta property="og:description" content="Four spaces, four separate browser sessions, one window. A Windows hub and an Android app for people who live in the multi-account problem.">
+  <meta property="og:image" content="/assets/img/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Bop: All your people. One happy place.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Bop — many accounts, one quiet hub">
+  <meta name="twitter:description" content="Each space keeps its own cookies, storage and login. No logging out. No account bleeding into another.">
+  <meta name="twitter:image" content="/assets/img/og.png">
+
+  <link rel="icon" href="/assets/img/favicon.png" type="image/png" sizes="64x64">
+  <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="modulepreload" href="/assets/badge-model.js">
+  <link rel="stylesheet" href="/assets/styles.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Bop",
+    "description": "A desktop and Android hub that gives every messaging or web account its own separate browser session, plus a floating bubble that reports which account moved.",
+    "applicationCategory": "ProductivityApplication",
+    "operatingSystem": "Windows 10, Windows 11, Android 7.0 or newer",
+    "softwareVersion": "0.2.8",
+    "url": "https://github.com/Annguyen0410/Bop",
+    "downloadUrl": "https://github.com/Annguyen0410/Bop/releases/tag/v0.2.8",
+    "sameAs": "https://github.com/Annguyen0410/Bop"
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="reading-rule" aria-hidden="true"><span></span></div>
+
+  <header class="masthead">
+    <div class="masthead__inner">
+      <a class="wordmark" href="#top" aria-label="Bop — home">
+        <svg class="wordmark__mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+          <rect width="40" height="40" rx="11" fill="var(--brand)"></rect>
+          <path d="M12 11h16a5 5 0 0 1 5 5v7a5 5 0 0 1-5 5h-7.4L15 32v-4h-3a5 5 0 0 1-5-5v-7a5 5 0 0 1 5-5Z" fill="var(--lime)"></path>
+          <circle cx="16.6" cy="19" r="1.7" fill="var(--ink-deep)"></circle>
+          <circle cx="23.4" cy="19" r="1.7" fill="var(--ink-deep)"></circle>
+          <path d="M16 22.4c1.7 1.7 6.3 1.7 8 0" fill="none" stroke="var(--ink-deep)" stroke-width="1.6" stroke-linecap="round"></path>
+          <path d="M32 5.5 33 9l3.5 1-3.5 1-1 3.5-1-3.5L27.5 10 31 9Z" fill="#fff"></path>
+        </svg>
+        <span>bop</span>
+      </a>
+
+      <nav class="masthead__nav" aria-label="Sections">
+        <a href="#spaces">Spaces</a>
+        <a href="#features">Features</a>
+        <a href="#demo">Demo</a>
+        <a href="#how">How it works</a>
+        <a href="#proof">Proof</a>
+        <a href="#gallery">Gallery</a>
+      </nav>
+
+      <a class="button button--small button--primary masthead__cta" href="#download">Download</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <p class="eyebrow hero__eyebrow">Your little internet · Windows + Android</p>
+      <h1 id="hero-title"><span class="headline-line">All your people.</span><span class="headline-line headline-line--mark">One happy place.</span></h1>
+      <div class="hero__copy">
+        <p class="hero__lead">Bop keeps several messaging and web accounts apart on one device. Every space gets its own browser session — its own cookies, its own storage, its own login. No logging out. No profile juggling.</p>
+        <div class="hero__actions">
+          <a class="button button--primary" href="https://github.com/Annguyen0410/Bop/releases/tag/v0.2.8">Download Bop 0.2.8</a>
+          <a class="button button--ghost" href="#demo">Poke the bubble</a>
+        </div>
+        <p class="hero__note">Free and independent. No Bop account, no Bop server, no analytics.</p>
+      </div>
+
+      <div class="hero__stage" aria-label="Real captures of Bop">
+        <div class="hero__field" aria-hidden="true"></div>
+        <figure class="plate plate--wide">
+          <img src="/assets/img/desktop-dashboard.webp"
+               srcset="/assets/img/desktop-dashboard-900.webp 900w, /assets/img/desktop-dashboard.webp 1600w"
+               sizes="(min-width: 1100px) 720px, (min-width: 720px) 62vw, 92vw"
+               width="1600" height="860" fetchpriority="high" decoding="async"
+               alt="The Bop desktop hub: a sidebar listing four spaces, and cards for two social accounts and two task panels, one of them watching a page.">
+          <figcaption class="plate__caption plate__caption--end"><span>Desktop hub · 0.2.8 · one window, four spaces</span></figcaption>
+        </figure>
+
+        <figure class="plate plate--phone">
+          <img src="/assets/img/android-spaces.webp" width="720" height="1600" loading="lazy" decoding="async"
+               alt="The Bop Android app in dark mode: a lime Add button, a Floating bubble switch, and space cards for Account A and Account B.">
+        </figure>
+
+        <div class="bubble-chip" aria-hidden="true">
+          <span class="bubble-chip__badge">3</span>
+          <svg viewBox="0 0 64 64" focusable="false">
+            <circle cx="32" cy="32" r="30" fill="var(--brand)"></circle>
+            <circle cx="32" cy="32" r="24" fill="var(--lime)"></circle>
+            <circle cx="24" cy="29" r="2.6" fill="var(--ink-deep)"></circle>
+            <circle cx="40" cy="29" r="2.6" fill="var(--ink-deep)"></circle>
+            <path d="M23 37c3.4 4 14.6 4 18 0" fill="none" stroke="var(--ink-deep)" stroke-width="2.6" stroke-linecap="round"></path>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section class="band band--statement" aria-labelledby="problem-title">
+      <div class="band__label" aria-hidden="true">01 / The problem</div>
+      <div class="statement">
+        <h2 id="problem-title">The problem was never notifications.<br>It was the <em>switching</em>.</h2>
+        <div class="statement__body">
+          <p>The moment you care about more than one account of the same kind — two Messenger logins, a study board and a job feed — your options are to log out and back in, juggle browser profiles, or accept that everything bleeds together.</p>
+          <p>Bop treats separation as the primary thing to get right. A space is not a tab. It is a full browser session that happens to live inside the same window.</p>
+        </div>
+        <ol class="before-after">
+          <li><span class="before-after__tag">Without Bop</span> Log out. Log back in. Lose the tab. Repeat at 9 a.m.</li>
+          <li><span class="before-after__tag">With Bop</span> Press A, B, C or D. Everyone stays signed in.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="spaces" aria-labelledby="spaces-title">
+      <header class="section__head">
+        <p class="eyebrow">02 / Spaces</p>
+        <h2 id="spaces-title">Four doors.<br>Different keys.</h2>
+        <p class="section__lead">Cookies, site storage and cache never cross a space boundary. Two Facebook accounts on the same machine genuinely cannot see each other.</p>
+      </header>
+
+      <figure class="plate plate--full">
+        <img src="/assets/img/desktop-space.webp" width="1200" height="741" loading="lazy" decoding="async"
+             alt="A Bop desktop window with a space open: the sidebar marks Account A green, and the pane beside it is ready for that account's own signed-in page.">
+        <figcaption class="plate__caption"><span>One space open</span><span>its own cookies, storage and cache</span></figcaption>
+      </figure>
+
+      <div class="space-rules">
+        <div class="rule-item">
+          <h3>Clear one, keep the rest</h3>
+          <p>Clearing a space removes that space's cookies, site storage and cache. Every other account stays signed in.</p>
+        </div>
+        <div class="rule-item">
+          <h3>Hide is not delete</h3>
+          <p>Hide removes a space from the list but keeps its local login and its picture. Delete removes the space and erases its browser profile.</p>
+        </div>
+        <div class="rule-item">
+          <h3>Pages sleep, logins don't</h3>
+          <p>Three pages stay live by default. Others go to sleep, are labelled <em>asleep</em>, and wake when you open them. On 0.2.1 one sleeping page returned about 90&nbsp;MB.</p>
+        </div>
+        <div class="rule-item">
+          <h3>No fixed ceiling</h3>
+          <p>Spaces are named A…Z, AA… — a naming scheme, not a limit. One AI space is one login; add the same assistant twice for two accounts.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features" aria-labelledby="features-title">
+      <header class="section__head">
+        <p class="eyebrow">03 / What makes it different</p>
+        <h2 id="features-title">A quiet hub, not another inbox.</h2>
+        <p class="section__lead">Bop is a notification assistant. It shows you that something happened and opens the real conversation. It does not host a chat UI, and it never pretends to.</p>
+      </header>
+
+      <div class="features">
+        <article class="feature feature--lead">
+          <p class="feature__num">01</p>
+          <h3>A bubble that knows which account moved</h3>
+          <p>A small round overlay, docked to the screen edge. Set it to 48, 56, 64, 72 or 80&nbsp;px, choose its transparency, what a double-click does, and whether it floats over full-screen apps. Or use a picture of your own.</p>
+          <div class="feature__art feature__art--bubbles" aria-hidden="true">
+            <span class="art-bubble art-bubble--48"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="var(--brand)"></circle><circle cx="9" cy="10.5" r="1.2" fill="var(--lime)"></circle><circle cx="15" cy="10.5" r="1.2" fill="var(--lime)"></circle><path d="M8.5 14c2 1.8 5 1.8 7 0" stroke="var(--lime)" fill="none" stroke-width="1.2" stroke-linecap="round"></path></svg><em>48</em></span>
+            <span class="art-bubble art-bubble--64"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="var(--brand)"></circle><circle cx="9" cy="10.5" r="1.2" fill="var(--lime)"></circle><circle cx="15" cy="10.5" r="1.2" fill="var(--lime)"></circle><path d="M8.5 14c2 1.8 5 1.8 7 0" stroke="var(--lime)" fill="none" stroke-width="1.2" stroke-linecap="round"></path></svg><em>64</em></span>
+            <span class="art-bubble art-bubble--80"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="var(--brand)"></circle><circle cx="9" cy="10.5" r="1.2" fill="var(--lime)"></circle><circle cx="15" cy="10.5" r="1.2" fill="var(--lime)"></circle><path d="M8.5 14c2 1.8 5 1.8 7 0" stroke="var(--lime)" fill="none" stroke-width="1.2" stroke-linecap="round"></path></svg><em>80</em></span>
+            <span class="art-caption">the same bubble, three of its five sizes</span>
+          </div>
+        </article>
+
+        <article class="feature feature--badge">
+          <p class="feature__num">02</p>
+          <h3>The badge counts chats, not messages</h3>
+          <p>One number, capped at 99+, and it says so honestly: it is a count of observed chats that are waiting, never a message body. Mark a space VIP and one waiting chat there is enough to turn the whole badge red.</p>
+          <div class="badge-pair" aria-hidden="true">
+            <span class="badge badge--normal">4</span>
+            <span class="badge badge--vip">1</span>
+            <span class="badge-pair__note">ordinary → blue · VIP → red</span>
+          </div>
+        </article>
+
+        <article class="feature feature--watch">
+          <p class="feature__num">03</p>
+          <h3>Watch a task panel while you work</h3>
+          <p class="feature__scope">Desktop</p>
+          <p>A paid-study board or a job feed changes while you are in another window. Opt in to a watch, optionally with a CSS selector and a phrase such as <code>available</code>. The first reading is a baseline; after that a card appears the moment the page really changes. Pages are read, never reloaded.</p>
+          <div class="feature__art feature__art--watch" aria-hidden="true">
+            <span class="watch-line"><i></i>14:02 · no studies</span>
+            <span class="watch-line watch-line--hit"><i></i>14:07 · <strong>available</strong></span>
+            <span class="watch-line"><i></i>14:07 · card raised</span>
+          </div>
+        </article>
+
+        <article class="feature feature--phone">
+          <p class="feature__num">04</p>
+          <h3>Turn the phone's notifications into cards</h3>
+          <p class="feature__scope">Android</p>
+          <p>Grant notification access and Bop's own listener turns the phone's notifications into per-account cards and a per-account bubble badge. A web session's unread signals work separately, without notification access.</p>
+          <p class="feature__link"><a href="#gallery">See the Android checks</a></p>
+        </article>
+
+        <article class="feature feature--privacy">
+          <p class="feature__num">05</p>
+          <h3>Nothing leaves the device</h3>
+          <p>No Bop server, no Bop account, no telemetry, no crash reporting. Settings are encrypted with the operating system's own key store when one is available. Alerts live in memory and are gone when Bop closes.</p>
+          <p class="feature__link"><a href="https://github.com/Annguyen0410/Bop/blob/main/docs/PRIVACY.md">Read the privacy policy</a></p>
+        </article>
+
+        <article class="feature feature--desk">
+          <p class="feature__num">06</p>
+          <h3>The hub gets out of the way</h3>
+          <p>Closing the hub hides it to the tray, where it keeps listening. Quit is the only thing that stops it. Startup with Windows is one switch, and the page budget is yours: 3, 5, 8 or all.</p>
+          <p class="feature__link"><a href="#how">How the pieces fit</a></p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section section--lab" id="demo" aria-labelledby="demo-title">
+      <header class="section__head">
+        <p class="eyebrow">04 / Try it here</p>
+        <h2 id="demo-title">Poke the bubble.</h2>
+        <p class="section__lead">A working model of Bop's badge rules, using the same tone table as <code>VipBadge.kt</code>. <strong>This is a simulation on this page, not a live connection to the app.</strong></p>
+      </header>
+
+      <div class="lab" data-badge-lab>
+        <div class="lab__stage">
+          <div class="lab__bubble" data-bubble>
+            <span class="lab__badge" data-badge hidden>0</span>
+            <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+              <circle cx="32" cy="32" r="30" fill="var(--brand)"></circle>
+              <circle cx="32" cy="32" r="24" fill="var(--lime)"></circle>
+              <circle cx="24" cy="29" r="2.6" fill="var(--ink-deep)"></circle>
+              <circle cx="40" cy="29" r="2.6" fill="var(--ink-deep)"></circle>
+              <path d="M23 37c3.4 4 14.6 4 18 0" fill="none" stroke="var(--ink-deep)" stroke-width="2.6" stroke-linecap="round"></path>
+            </svg>
+          </div>
+          <p class="lab__readout" data-readout role="status" aria-live="polite">No chats waiting. The badge is hidden.</p>
+        </div>
+
+        <div class="lab__panel">
+          <ul class="lab__spaces">
+            <li class="lab__space">
+              <span class="lab__key" aria-hidden="true">A</span>
+              <span class="lab__name">Messenger<small>social account</small></span>
+              <span class="lab__count" data-count="A">0 <span class="visually-hidden">waiting chats</span></span>
+              <span class="lab__actions">
+                <button class="button button--tiny" type="button" data-arrive="A">Arrival</button>
+                <button class="button button--tiny button--quiet" type="button" data-read="A">Read one</button>
+              </span>
+              <label class="vip-switch"><input type="checkbox" data-vip="A"><span>VIP</span></label>
+            </li>
+            <li class="lab__space">
+              <span class="lab__key" aria-hidden="true">B</span>
+              <span class="lab__name">Facebook<small>social account</small></span>
+              <span class="lab__count" data-count="B">0 <span class="visually-hidden">waiting chats</span></span>
+              <span class="lab__actions">
+                <button class="button button--tiny" type="button" data-arrive="B">Arrival</button>
+                <button class="button button--tiny button--quiet" type="button" data-read="B">Read one</button>
+              </span>
+              <label class="vip-switch"><input type="checkbox" data-vip="B"><span>VIP</span></label>
+            </li>
+            <li class="lab__space">
+              <span class="lab__key" aria-hidden="true">C</span>
+              <span class="lab__name">Study board<small>task panel</small></span>
+              <span class="lab__count" data-count="C">0 <span class="visually-hidden">waiting chats</span></span>
+              <span class="lab__actions">
+                <button class="button button--tiny" type="button" data-arrive="C">Arrival</button>
+                <button class="button button--tiny button--quiet" type="button" data-read="C">Read one</button>
+              </span>
+              <label class="vip-switch"><input type="checkbox" data-vip="C"><span>VIP</span></label>
+            </li>
+            <li class="lab__space">
+              <span class="lab__key" aria-hidden="true">D</span>
+              <span class="lab__name">Mailbox<small>mail space</small></span>
+              <span class="lab__count" data-count="D">0 <span class="visually-hidden">waiting chats</span></span>
+              <span class="lab__actions">
+                <button class="button button--tiny" type="button" data-arrive="D">Arrival</button>
+                <button class="button button--tiny button--quiet" type="button" data-read="D">Read one</button>
+              </span>
+              <label class="vip-switch"><input type="checkbox" data-vip="D"><span>VIP</span></label>
+            </li>
+          </ul>
+          <div class="lab__foot">
+            <button class="button button--quiet" type="button" data-reset>Clear every space</button>
+            <p class="lab__hint">A card belongs to a space, not to a message. “Read one” acknowledges one waiting card, exactly as the hub does.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="how" aria-labelledby="how-title">
+      <header class="section__head">
+        <p class="eyebrow">05 / How it works</p>
+        <h2 id="how-title">Three minutes to a quieter desk.</h2>
+      </header>
+
+      <ol class="steps">
+        <li class="step">
+          <span class="step__num" aria-hidden="true">01</span>
+          <div class="step__body">
+            <h3>Add a space</h3>
+            <p>Choose a service from the catalog, or on the desktop paste any address. Name it for the account, not the app: <em>Work Facebook</em>, not <em>Facebook</em>.</p>
+          </div>
+          <p class="step__meta">Desktop · Android</p>
+        </li>
+        <li class="step">
+          <span class="step__num" aria-hidden="true">02</span>
+          <div class="step__body">
+            <h3>Sign in once, per space</h3>
+            <p>Each space keeps its own cookies and storage. Leave it running in the background pane; switching between Spaces, Alerts, Settings and Guide never closes it.</p>
+          </div>
+          <p class="step__meta">Desktop · Android</p>
+        </li>
+        <li class="step">
+          <span class="step__num" aria-hidden="true">03</span>
+          <div class="step__body">
+            <h3>Let the bubble tell you</h3>
+            <p>Close the hub to the tray, or keep the phone bubble docked. When something arrives, the badge moves. Tap the card to open the real conversation in its own session.</p>
+          </div>
+          <p class="step__meta">Desktop · Android</p>
+        </li>
+        <li class="step">
+          <span class="step__num" aria-hidden="true">04</span>
+          <div class="step__body">
+            <h3>Watch the pages that matter</h3>
+            <p>On the desktop, add a watch to a task panel with an optional selector and phrase. On the phone, the notification listener covers the apps that post notifications. Neither invents a message.</p>
+          </div>
+          <p class="step__meta">Desktop watches · Android notifications</p>
+        </li>
+      </ol>
+
+      <aside class="platform-note" aria-label="The two apps are deliberately different">
+        <h3>Two apps, two jobs — not a port</h3>
+        <div class="platform-note__grid">
+          <div>
+            <p class="platform-note__tag">Desktop</p>
+            <p>Parallel logins and task-panel watching. Native tab-title events, tray delivery, an opt-in page check every few minutes.</p>
+          </div>
+          <div>
+            <p class="platform-note__tag">Android</p>
+            <p>Installed-app notifications and parallel web logins. WebView title events while a space is loaded, best effort when off-screen.</p>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="section section--proof" id="proof" aria-labelledby="proof-title">
+      <header class="section__head">
+        <p class="eyebrow">06 / Proof</p>
+        <h2 id="proof-title">Measured, not promised.</h2>
+        <p class="section__lead">Every number below came from a run against the files in this repository. Raw reports are linked, including the ones that say what was <em>not</em> verified.</p>
+      </header>
+
+      <ul class="proof-list">
+        <li class="proof-row">
+          <p class="proof-row__claim">Android JVM tests</p>
+          <p class="proof-row__result"><strong>963</strong> passed · 0 failed</p>
+          <p class="proof-row__note"><code>./gradlew :app:testDebugUnitTest</code>, 14 Nov 2026</p>
+        </li>
+        <li class="proof-row">
+          <p class="proof-row__claim">Desktop tests</p>
+          <p class="proof-row__result"><strong>1,106</strong> passed · 0 failed</p>
+          <p class="proof-row__note"><code>cd desktop &amp;&amp; npm test</code>, 14 Nov 2026</p>
+        </li>
+        <li class="proof-row">
+          <p class="proof-row__claim">Android lint</p>
+          <p class="proof-row__result"><strong>0</strong> errors · 51 pre-existing warnings</p>
+          <p class="proof-row__note"><a href="https://github.com/Annguyen0410/Bop/blob/main/docs/verification.md">verification log</a>, 12 Nov 2026</p>
+        </li>
+        <li class="proof-row">
+          <p class="proof-row__claim">Same-site session isolation</p>
+          <p class="proof-row__result">two accounts → <strong>[1,1]</strong> sessions</p>
+          <p class="proof-row__note"><a href="https://github.com/Annguyen0410/Bop/blob/main/docs/evidence/major-update/source-smoke.json">source-smoke.json</a>, real Electron</p>
+        </li>
+        <li class="proof-row">
+          <p class="proof-row__claim">Memory returned by a sleeping page</p>
+          <p class="proof-row__result">3 live pages <strong>992–1004&nbsp;MB</strong> / 10 processes</p>
+          <p class="proof-row__note"><a href="https://github.com/Annguyen0410/Bop/blob/main/docs/evidence/desktop-portable/live-check-022.json">live-check-022.json</a>, measured on 0.2.1</p>
+        </li>
+      </ul>
+
+      <aside class="limits">
+        <h3>What Bop does not do</h3>
+        <ul>
+          <li>It is not a messaging client and does not host a chat UI. It tells you something happened and opens the real conversation.</li>
+          <li>It cannot recover a notification that was never posted. Muted chats, an already-open chat, or a suspended session leave nothing to observe.</li>
+          <li>An unread marker is a count, not a message. A dot cannot say which message is new.</li>
+          <li>Background delivery is best effort on both platforms. Doze suspends timers; Android may kill an off-screen web session.</li>
+          <li>No real signed-in service account has been exercised in this repository's verification. Neither build is code-signed.</li>
+        </ul>
+        <p><a href="https://github.com/Annguyen0410/Bop#what-is-verified-and-what-is-not">Read the full verification table</a></p>
+      </aside>
+    </section>
+
+    <section class="section" id="gallery" aria-labelledby="gallery-title">
+      <header class="section__head">
+        <p class="eyebrow">07 / Gallery</p>
+        <h2 id="gallery-title">The actual app, at actual size.</h2>
+        <p class="section__lead">These are captures from the shipped builds — no invented screens. Select any one to see it larger.</p>
+      </header>
+
+      <div class="gallery">
+        <button class="shot shot--wide" type="button" data-shot
+                data-src="/assets/img/desktop-dashboard.webp" data-title="The desktop hub"
+                data-caption="Four spaces in one window: two social accounts and two task panels. The sidebar keeps the account list; the pane never reloads when you switch section."
+                data-width="1600" data-height="860">
+          <img src="/assets/img/desktop-dashboard.webp" width="1600" height="860" loading="lazy" decoding="async"
+               alt="Bop's desktop hub with four spaces: Account A and Account B, plus two task panels.">
+          <span class="shot__cap"><span>Desktop hub</span><span>4 spaces</span></span>
+        </button>
+
+        <button class="shot shot--phone" type="button" data-shot
+                data-src="/assets/img/android-spaces.webp" data-title="Spaces on Android"
+                data-caption="Dark mode on the phone: a lime Add button, the floating-bubble switch, and one card per account. The bubble is off in this capture."
+                data-width="720" data-height="1600">
+          <img src="/assets/img/android-spaces.webp" width="720" height="1600" loading="lazy" decoding="async"
+               alt="Bop for Android in dark mode, showing the Floating bubble card and two Messenger spaces.">
+          <span class="shot__cap"><span>Android spaces</span><span>dark</span></span>
+        </button>
+
+        <button class="shot shot--phone" type="button" data-shot
+                data-src="/assets/img/android-bubble.webp" data-title="The bubble, docked"
+                data-caption="The bubble sits over the home screen. A tap opens the space menu: Account A, Account B, Open hub screen, Stop bubble. It stays where you drag it."
+                data-width="720" data-height="1600">
+          <img src="/assets/img/android-bubble.webp" width="720" height="1600" loading="lazy" decoding="async"
+               alt="An Android home screen with Bop's round bubble on the right edge and its space menu open.">
+          <span class="shot__cap"><span>Android bubble</span><span>space menu</span></span>
+        </button>
+
+        <button class="shot shot--phone" type="button" data-shot
+                data-src="/assets/img/android-checks.webp" data-title="Runs on every phone"
+                data-caption="Six live checks with a repair path each: Bop notifications, notification access, listener connection, float over apps, battery optimisation, parallel web sessions."
+                data-width="720" data-height="1600">
+          <img src="/assets/img/android-checks.webp" width="720" height="1600" loading="lazy" decoding="async"
+               alt="Bop's Android settings showing the Runs on every phone checklist, with 2 of 6 checks needing attention.">
+          <span class="shot__cap"><span>The every-phone card</span><span>6 live checks</span></span>
+        </button>
+
+        <button class="shot" type="button" data-shot
+                data-src="/assets/img/desktop-settings.webp" data-title="Settings, on the desktop"
+                data-caption="Appearance, the floating bubble's size and transparency, the double-click action, and the page budget live in one pane."
+                data-width="1200" data-height="741">
+          <img src="/assets/img/desktop-settings.webp" width="1200" height="741" loading="lazy" decoding="async"
+               alt="Bop's desktop settings: appearance System/Light/Dark, floating bubble size choices, transparency and double-click options.">
+          <span class="shot__cap"><span>Desktop settings</span><span>bubble &amp; appearance</span></span>
+        </button>
+
+        <button class="shot" type="button" data-shot
+                data-src="/assets/img/reminder.webp" data-title="Bop's own reminder card"
+                data-caption="Bop's own notification, not a mirrored chat: the tray reminder that a space is waiting while the hub stays hidden."
+                data-width="336" data-height="128">
+          <img src="/assets/img/reminder.webp" width="336" height="128" loading="lazy" decoding="async"
+               alt="A small Windows notification from Bop reminding the user that a space is waiting.">
+          <span class="shot__cap"><span>Tray reminder</span><span>Windows</span></span>
+        </button>
+      </div>
+    </section>
+
+    <section class="section" id="faq" aria-labelledby="faq-title">
+      <header class="section__head">
+        <p class="eyebrow">08 / Questions</p>
+        <h2 id="faq-title">The honest answers.</h2>
+      </header>
+
+      <div class="faq">
+        <details>
+          <summary>Does Bop replace Messenger, WhatsApp or Instagram?</summary>
+          <p>No. Bop is a session hub and a notification assistant. It shows you that something happened and opens the real conversation inside that account's own session. Messages are still sent and read in the service's own page or app.</p>
+        </details>
+        <details>
+          <summary>Why does Windows warn me before it runs?</summary>
+          <p>Neither desktop file is code-signed, so SmartScreen shows “Windows protected your PC”. Choose <strong>More info → Run anyway</strong>, or build and sign it with your own certificate. The Android release APK is unsigned too: sign it before installing or sharing it.</p>
+        </details>
+        <details>
+          <summary>Which versions does it run on?</summary>
+          <p>Windows 10 or 11, x64. Android 7.0 (API 24) or newer. The desktop app is Electron; the phone app is Kotlin with Compose.</p>
+        </details>
+        <details>
+          <summary>Do I need a Bop account?</summary>
+          <p>No, and there is nowhere to make one. Bop has no server and no analytics. You sign in to each service inside its own space, and those cookies stay in that space's local browser profile.</p>
+        </details>
+        <details>
+          <summary>Does Bop read my messages?</summary>
+          <p>On Android it reads message-like notifications through notification access, keeps previews in memory, and never writes them to disk. Web monitoring uses the WebView tab title, not an injected script or a DOM observer. On the desktop it reads the tab title, and for a space you chose to watch, that page's own text to tell you it changed. No message bodies, senders or credentials are extracted.</p>
+        </details>
+        <details>
+          <summary>Will it keep running when the hub is closed?</summary>
+          <p>On Windows, closing the hub hides it to the tray and it keeps listening; only Quit stops it. On Android, delivery is best effort: Android may suspend an off-screen web session, Doze suspends timers, and some phone brands kill background apps. The app's “Runs on every phone” checks name the settings that matter.</p>
+        </details>
+        <details>
+          <summary>Can two accounts of the same site really stay separate?</summary>
+          <p>Yes — that is the whole design. Each space has its own cookies, site storage and cache, so two Facebook logins never see each other. The repository's integration harness asserts two same-origin sessions on the desktop, and the Android spaces use separate web profiles.</p>
+        </details>
+        <details>
+          <summary>Is Bop free? Can I redistribute it?</summary>
+          <p>It is an independent project with no paid tier and no ads. Careful with redistribution: the repository grants <strong>no open-source licence yet</strong>, so the source is public but reuse rights are reserved. Ask in the repository before shipping a modified build.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="download" id="download" aria-labelledby="download-title">
+      <div class="download__inner">
+        <p class="eyebrow">09 / Get it</p>
+        <h2 id="download-title">One window.<br>Four spaces.<br><span class="mark-underline">No logging out.</span></h2>
+        <p class="download__lead">Download the build that matches your machine. Both desktop files carry the same app; the installer just puts it in your Start menu.</p>
+
+        <div class="download__grid">
+          <a class="download-card" href="https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-portable.exe">
+            <span class="download-card__os">Windows 10/11 · x64</span>
+            <strong>Portable</strong>
+            <span class="download-card__meta">One self-contained file · 119 MB</span>
+          </a>
+          <a class="download-card" href="https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-setup.exe">
+            <span class="download-card__os">Windows 10/11 · x64</span>
+            <strong>Installer</strong>
+            <span class="download-card__meta">Per-user install · 82 MB</span>
+          </a>
+          <a class="download-card" href="https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-debug.apk">
+            <span class="download-card__os">Android 7.0+</span>
+            <strong>Debug APK</strong>
+            <span class="download-card__meta">Installable for testing · 12 MB</span>
+          </a>
+          <a class="download-card" href="https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-release-unsigned.apk">
+            <span class="download-card__os">Android 7.0+</span>
+            <strong>Release APK</strong>
+            <span class="download-card__meta">Unsigned — sign before use · 1.4 MB</span>
+          </a>
+        </div>
+
+        <p class="download__warning"><strong>Unsigned on purpose.</strong> Windows shows SmartScreen on first run; the release APK must be signed with your own key. Nothing here is published by the services Bop can sign into.</p>
+
+        <p class="download__source">Prefer source? <a href="https://github.com/Annguyen0410/Bop#build-from-source">Build both apps from the repository</a> · <a href="https://github.com/Annguyen0410/Bop/releases/tag/v0.2.8">Release notes</a></p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <div class="footer__brand">
+        <a class="wordmark wordmark--footer" href="#top">
+          <svg class="wordmark__mark" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
+            <rect width="40" height="40" rx="11" fill="var(--brand)"></rect>
+            <path d="M12 11h16a5 5 0 0 1 5 5v7a5 5 0 0 1-5 5h-7.4L15 32v-4h-3a5 5 0 0 1-5-5v-7a5 5 0 0 1 5-5Z" fill="var(--lime)"></path>
+            <circle cx="16.6" cy="19" r="1.7" fill="var(--ink-deep)"></circle>
+            <circle cx="23.4" cy="19" r="1.7" fill="var(--ink-deep)"></circle>
+            <path d="M16 22.4c1.7 1.7 6.3 1.7 8 0" fill="none" stroke="var(--ink-deep)" stroke-width="1.6" stroke-linecap="round"></path>
+          </svg>
+          <span>bop</span>
+        </a>
+        <p>Many yous. One Bop. An independent hub for the multi-account problem.</p>
+        <p class="footer__fine">No Bop server · no Bop account · no analytics</p>
+      </div>
+
+      <nav class="footer__nav" aria-label="Footer">
+        <div>
+          <h2>Product</h2>
+          <a href="#spaces">Spaces</a>
+          <a href="#features">Features</a>
+          <a href="#demo">Bubble demo</a>
+          <a href="#how">How it works</a>
+          <a href="#gallery">Gallery</a>
+        </div>
+        <div>
+          <h2>Read</h2>
+          <a href="https://github.com/Annguyen0410/Bop#readme">README</a>
+          <a href="https://github.com/Annguyen0410/Bop/blob/main/docs/verification.md">Verification log</a>
+          <a href="https://github.com/Annguyen0410/Bop/blob/main/docs/desktop.md">Desktop notes</a>
+          <a href="https://github.com/Annguyen0410/Bop/blob/main/docs/PRIVACY.md">Privacy policy</a>
+        </div>
+        <div>
+          <h2>Get</h2>
+          <a href="#download">Download</a>
+          <a href="https://github.com/Annguyen0410/Bop/releases/tag/v0.2.8">Release 0.2.8</a>
+          <a href="https://github.com/Annguyen0410/Bop">GitHub</a>
+          <a href="https://github.com/Annguyen0410/Bop/issues">Issues &amp; contact</a>
+        </div>
+      </nav>
+
+      <div class="footer__appearance">
+        <fieldset>
+          <legend>Appearance of this site</legend>
+          <p>Bop's own settings offer System, Light and Dark. The site follows your system until you choose.</p>
+          <div class="appearance-options">
+            <label><input type="radio" name="appearance" value="system" checked><span>System</span></label>
+            <label><input type="radio" name="appearance" value="light"><span>Light</span></label>
+            <label><input type="radio" name="appearance" value="dark"><span>Dark</span></label>
+          </div>
+        </fieldset>
+      </div>
+    </div>
+    <p class="footer__legal">© 2026 Bop. No licence is granted for redistribution. Bop is not affiliated with, endorsed by, or shipped by any of the services it can sign into. Screenshots are real captures of the app; the bubble demonstration is a simulation.</p>
+  </footer>
+
+  <dialog class="shot-dialog" id="shot-dialog" closedby="any" aria-labelledby="shot-title">
+    <form method="dialog" class="shot-dialog__bar">
+      <button class="button button--tiny" type="submit" autofocus>Close</button>
+    </form>
+    <img data-dialog-img src="/assets/img/desktop-dashboard.webp" width="1600" height="860" alt="">
+    <div class="shot-dialog__text">
+      <h2 id="shot-title">The desktop hub</h2>
+      <p data-dialog-caption></p>
+    </div>
+  </dialog>
+
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>
