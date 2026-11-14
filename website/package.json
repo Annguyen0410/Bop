@@ -8,7 +8,7 @@
     "dev": "node scripts/serve.mjs --dir . --port 4173",
     "build": "node scripts/build.mjs",
     "preview": "node scripts/serve.mjs --dir dist --port 4173",
-    "test": "node --test test/",
+    "test": "node --test",
     "check:browser": "node scripts/build.mjs && node scripts/browser-check.mjs"
   },
   "devDependencies": {
