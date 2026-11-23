@@ -258,14 +258,29 @@ function homeFor(space) {
   return appOrDefault(space.appId).home;
 }
 
+/**
+ * The scheme a URL parses to, folded to lower case by the WHATWG parser. Null when it does not parse.
+ *
+ * This is how scheme questions are answered here, never by matching the raw text: `HTTPS://…` and
+ * `HtTpS://…` are https pages, and a string that does not parse is nothing at all.
+ */
+function protocolOf(url) {
+  try {
+    return new URL(String(url)).protocol.toLowerCase() || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function pageAllowed(space, url) {
   const hostname = hostnameOf(url);
   if (!hostname) return false;
   if (!hostAllowed(hostsFor(space), hostname)) return false;
-  if (url.startsWith('https://')) return true;
+  const protocol = protocolOf(url);
+  if (protocol === 'https:') return true;
   // Plain http is refused everywhere except a loopback address, which cannot leave the machine.
   // Same rule the Android build enforces with usesCleartextTraffic="false".
-  return url.startsWith('http://') && (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1');
+  return protocol === 'http:' && (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1');
 }
 
 /**
@@ -897,6 +912,7 @@ module.exports = {
   deleteSlot,
   MAX_EXTRA_HOSTS,
   hostnameOf,
+  protocolOf,
   hostAllowed,
   homeFor,
   pageAllowed,
