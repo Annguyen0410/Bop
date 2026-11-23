@@ -79,7 +79,10 @@ sha256sum Bop-0.2.8-setup.exe
 4. **Set up a watch on a task panel.** `Watch` on the card, optionally a CSS selector (`#jobs, .studies`)
    and a phrase such as `available`. The first reading is only a baseline; after that you get a card the
    moment the page really changes. Pages are read, never reloaded, so a chat you are in the middle of is
-   left alone.
+   left alone. What a watch sees is exactly the page title plus the selector's matches — or the whole page
+   when the selector is empty or matches nothing — at most the first 20 000 characters, and the phrases
+   match against that same text. So one ignored word anywhere on an unscoped page keeps that watch quiet,
+   and a change past the 20 000-character horizon is invisible to Bop.
 5. **Make the bubble yours.** Settings → *Floating bubble*: 48, 56, 64, 72 or 80 px, transparency, what a
    double-click does, **a picture of your own** (any PNG, JPEG, WebP, BMP, GIF or SVG), and whether it
    floats over full-screen apps. Press it anywhere and drag — it stays exactly where you let go.
@@ -171,7 +174,9 @@ promise that a service still supports WebView login or chat.
   A task panel's sign-in that continues on another domain asks once for that one host, per space, and the
   grant is listed and revocable in Edit.
 - **What Bop reads from a page:** the tab title (an unread marker) and, for a space you asked to watch,
-  the page's own text so it can tell you it changed. No message bodies, senders or credentials are
+  the page's own text so it can tell you it changed — the watched selector's matches, or the whole page
+  body when there is no selector or it matches nothing, capped at the first 20 000 characters. No message
+  bodies, senders or credentials are
   extracted, and notification previews are not written to disk. Alerts live in memory and are gone when
   Bop closes.
 - **Screenshots and screen recording can expose whatever is on screen** — that is the operating system's

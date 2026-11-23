@@ -17,6 +17,7 @@ const popup = require('./popup.js');
 const notifyLog = require('./notify-log.js');
 const clipboardBridge = require('./clipboard-bridge.js');
 const externalUrl = require('./external-url.js');
+const watchedPage = require('./watched-page.js');
 const monitorHealth = require('./monitor-health.js');
 const autostart = require('./autostart.js');
 const portableJanitor = require('./portable-janitor.js');
@@ -1824,16 +1825,9 @@ async function readSpace(space) {
     if (!ready) return { error: 'Page load timed out; no reading was taken.' };
   }
   if (!view.webContents.getURL()) return { error: 'Page is not loaded yet.' };
-  const selector = JSON.stringify(space.watch.selector || '');
-  const source = `(() => {
-    const selector = ${selector};
-    let text = '';
-    try {
-      if (selector) text = Array.from(document.querySelectorAll(selector)).map((node) => node.innerText || node.textContent || '').join(' ').slice(0, 20000);
-      if (!text) text = (document.body && document.body.innerText ? document.body.innerText : '').slice(0, 20000);
-    } catch (_) { text = ''; }
-    return { title: document.title || '', text };
-  })();`;
+  // What one read takes from the page — selector-scoped or whole body, 20 000 characters — is one rule
+  // in [watched-page], documented there and proved in test/watch-semantics.test.js.
+  const source = watchedPage.readScript(space.watch.selector || '');
   try {
     const result = await view.webContents.executeJavaScript(source, true);
     return result && typeof result === 'object' ? result : null;
