@@ -37,7 +37,11 @@ watching itself in C, and a tray icon plus a small floating bubble telling you w
 </table>
 
 Bop was previously called TwoAccMess. Application IDs and the existing browser profile directories are
-unchanged, so upgrading does not deliberately reset your logins.
+unchanged, so upgrading does not deliberately reset your logins — **within one application ID**. The
+debug build installs as `com.example.twoaccmess` and the release build as `com.twoaccmess.hub`, and
+Android treats those as two different apps: they install side by side and neither carries the other's
+sessions, spaces or logins. Installing the debug APK over an existing debug install keeps you signed in;
+moving from one ID to the other is a fresh start by design, and the IDs are not changed to hide that.
 
 ## Download and run
 
@@ -47,8 +51,8 @@ Every file is an asset of the latest release, **[Bop 0.2.8](https://github.com/A
 | --- | --- | --- |
 | **Windows 10/11 x64 — portable** | [`Bop-0.2.8-portable.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-portable.exe) | One self-contained file. No installer, nothing added to Program Files. Your spaces and logins live in `%APPDATA%\Bop` and survive an upgrade. |
 | **Windows 10/11 x64 — installer** | [`Bop-0.2.8-setup.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-setup.exe) | Per-user installer. Choose this one if you start Bop often. Uninstall from Settings → Apps. |
-| **Android — 7.0 (API 24) or newer, debug** | [`Bop-2.1.1-android-debug.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-debug.apk) | Debug APK, installable for testing. |
-| **Android — 7.0 (API 24) or newer, unsigned** | [`Bop-2.1.1-android-release-unsigned.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-release-unsigned.apk) | Release APK is **unsigned**: sign it with your own key before installing it or handing it to anyone. |
+| **Android — 7.0 (API 24) or newer, debug** | [`Bop-2.1.1-android-debug.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-debug.apk) | Debug APK, installable for testing. Installs and runs on Android 7+, but **a web space needs Android 9 (API 28)**: `WebSessionPolicy.MIN_ANDROID` refuses below it, because separate browser storage needs it. On Android 7–8 you get the app catalog and notification cards only, and a web slot says why instead of opening. |
+| **Android — 7.0 (API 24) or newer, unsigned** | [`Bop-2.1.1-android-release-unsigned.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-release-unsigned.apk) | Release APK is **unsigned**: sign it with your own key before installing it or handing it to anyone. Same Android 7+ install / Android 9+ web-space rule as the debug APK. |
 
 **First launch on Windows will warn you.** Neither file is code-signed, so SmartScreen shows *“Windows
 protected your PC”* — choose **More info → Run anyway**, or sign the build with your own certificate. Bop
@@ -125,7 +129,12 @@ Read this part before installing. Everything below is measured, not promised.
 - **Background delivery is best effort on both platforms.** Desktop keeps loaded spaces alive while it is
   hidden in the tray. Android may suspend or kill an off-screen web session, and cannot push for a web
   session at all. Doze suspends timers. No amount of storage or settings changes that.
-- **No account details ever leave the device.** There is no Bop server, no Bop account, no analytics.
+- **No account details ever leave the device.** There is no Bop server, no Bop account, no analytics —
+  with one opt-in exception: the **Quick notes LAN sync**. When you turn it on, Bop's desktop app opens a
+  TCP listener on your local network (port 38671, private-range addresses only) and your phone pairs with
+  it with a code, after which note text and note images do move phone ↔ desktop over your own Wi-Fi,
+  encrypted with AES-256-GCM. It is off until you enable it, it never reaches the internet, and turning it
+  off stops the listener. Nothing else in Bop opens a port or makes a connection of its own.
 
 ## Two apps, two jobs
 
@@ -138,7 +147,7 @@ geometry, and nothing else.
 | Space kinds | Social accounts and AI accounts | `social`, `ai` (ChatGPT, Claude, Gemini) **and** `tasks` (user-testing and earning panels) |
 | How it learns about a page | Installed-app notifications + native WebView title events (off-screen best effort) | Native tab-title events + website alerts; opt-in task page checks |
 | Bubble | Always-on-top overlay window | Floating window with size, transparency, double-click action and a saved spot |
-| Catalog | 22 services with an HTTPS host allowlist: Messenger, Facebook, Instagram, WhatsApp, TikTok, Telegram, Zalo, X, Threads, Reddit, Discord, Snapchat, LinkedIn, Viber, Skype, Google Chat, VK, Bluesky, WeChat, ChatGPT, Claude, Gemini | any site you paste, one host per space, plus explicit one-time sign-in grants |
+| Catalog | **28 services**, each with an HTTPS host allowlist: 19 social (Messenger, Facebook, Instagram, WhatsApp, TikTok, Telegram, Zalo, X, Threads, Reddit, Discord, Snapchat, LinkedIn, Viber, Skype, Google Chat, VK, Bluesky, WeChat), 6 mail (Gmail, Outlook, Yahoo Mail, iCloud Mail, Proton Mail, Zoho Mail), 3 AI (ChatGPT, Claude, Gemini) — counted from `HubApps.kt` | any site you paste, one host per space, plus explicit one-time sign-in grants |
 
 They are deliberately different, not a port. A phone that re-read a study board would burn battery for
 something the notification listener already covers; a desktop that only mirrored phone notifications would
@@ -148,12 +157,17 @@ promise that a service still supports WebView login or chat.
 
 ## Privacy
 
-- **Nothing leaves the device.** No account, no telemetry, no crash reporting, no Bop server to call.
+- **Nothing leaves the device** — except the opt-in Quick notes LAN sync described above, which moves
+  note text and images between your own phone and your own desktop on your own network. No account, no
+  telemetry, no crash reporting, no Bop server to call.
 - **Settings are encrypted** with the operating system's own key store when one is available; Settings →
   Diagnostics says plainly when it is not.
-- **Cookies and logins** stay in each space's own Chromium profile. *Clear* removes cookies, site storage
+- **Cookies and logins** stay in each space's own browser profile. *Clear* removes cookies, site storage
   and cache for one space only — the others stay signed in. **Hide** removes a space from the list but
-  keeps its local login and its picture; **Delete** removes the space and erases its Chromium profile too.
+  keeps its local login and its picture. **Delete** removes the space and its data from Bop: on desktop it
+  also erases that space's Chromium profile, on Android "Delete + clear login" does, and plain Delete on
+  Android keeps the login so you can add the same site again signed in. No other space's session is ever
+  touched by any of these.
   A task panel's sign-in that continues on another domain asks once for that one host, per space, and the
   grant is listed and revocable in Edit.
 - **What Bop reads from a page:** the tab title (an unread marker) and, for a space you asked to watch,
@@ -235,13 +249,19 @@ Needs Node.js and, for the Android app, a JDK and the Android SDK.
 ```bash
 # Desktop (Electron) — Windows x64
 cd desktop
-npm install
-npm test                                       # 136 unit tests
-npm run smoke                                  # 47-step smoke against the source
-npm run dist:portable                          # -> dist-portable-final/Bop-0.2.7-portable.exe, one file
-npm run dist                                   # -> dist/Bop-0.2.7-portable.exe and Bop-0.2.7-setup.exe
-npm run smoke:live:exe                         # 18-step live check against that EXE
+npm ci
+npm test                                       # the unit suite (1155 subtests at 0.2.8)
+npm run smoke                                  # the functional smoke against the source (51 steps at 0.2.8)
+npm run dist:portable                          # -> dist-portable-final/Bop-<version>-portable.exe, one file
+npm run dist                                   # -> dist/Bop-<version>-portable.exe and Bop-<version>-setup.exe
+npm run smoke:live                             # live check against the source tree
 ```
+
+A **release** build ignores every verification flag (`--bop-smoke`, `--bop-monitor-smoke`,
+`--bop-retry-smoke`, `--bop-live-check`, `--bop-out`) on purpose and ships no harness, so the
+EXE-driven checks (`npm run smoke:live:exe`, `tools/startup-check.ps1`) only work against the source
+tree. What is checked on a release build instead: it launches, its packaged file list contains no
+harness, and its settings stay sealed — see [docs/verification.md](docs/verification.md).
 
 ```bash
 # Android
@@ -299,5 +319,7 @@ first store publication. The Android build ships **English only** on purpose
 
 ## Licence
 
-**No licence is granted by default.** Add one — and review the Play Store / SmartScreen requirements,
-signing and policy notes above — before publishing or sharing a build.
+**MIT** — see [LICENSE](LICENSE). Copyright (c) 2026 Huynh Thien An Nguyen. That covers this source tree
+and the builds made from it; it does not cover the names, content or services of the platforms Bop can
+sign into. Before publishing a build of your own, still review the Play Store / SmartScreen requirements,
+signing and policy notes above.

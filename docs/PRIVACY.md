@@ -1,8 +1,10 @@
 # Bop — Privacy Policy
 
-Last updated: 8 October 2026
+Last updated: 23 November 2026
 
-Bop runs entirely on your phone. It has no server, no account of its own, and no analytics.
+Bop runs entirely on your own devices. It has no server, no account of its own, and no analytics. The one
+thing that ever crosses your own network is the **Quick notes LAN sync**, which you turn on yourself and
+which is described below.
 
 ## What the app accesses
 
@@ -26,10 +28,22 @@ Bop runs entirely on your phone. It has no server, no account of its own, and no
 - It never uploads message content, notification content, or diagnostics anywhere.
 - It has no advertising, tracking, or third-party analytics SDK.
 
+## Quick notes and the opt-in LAN sync
+
+Notes are stored locally — on desktop in their own store beside the settings, encrypted with the
+operating system's key store when one is available (Settings → Diagnostics says plainly when it is not).
+
+When you turn on **LAN sync** in the notes window, the desktop app opens a TCP listener on your local
+network (port 38671) and accepts connections only from private-range addresses; anything else is dropped.
+Your phone pairs with it using a code, and note text and note images then move phone ↔ desktop over your
+own network, encrypted with AES-256-GCM. This is the single exception to "nothing leaves the device": it
+is off until you enable it, it never talks to the internet or to any Bop server (there is none), and
+turning it off stops the listener.
+
 ## Notification access
 
-Android grants notification access broadly. Bop filters for the 18 catalog apps that own a
-phone app and ignores every other package. It keeps only message-like notifications (a messaging
+Android grants notification access broadly. Bop filters for the 18 of its 28 catalog entries that own a
+phone package and ignores every other package. It keeps only message-like notifications (a messaging
 payload, a conversation shortcut, or a message category; unknown categories are accepted for
 compatibility and can be inaccurate) and stores previews in memory.
 You can revoke this at any time in Android Settings, which stops installed-app observation.
@@ -46,8 +60,17 @@ them from Settings, and copying is a manual action you take.
 
 Legacy spaces A–P keep separate private browser processes/directories. Additional spaces use named
 WebView profiles, separating cookies and website storage; all share the same Android UID, not a
-work-profile sandbox. Removing a space hides it but retains its local session and picture. Clear its
-local session in the browser before removal if you want to log out.
+work-profile sandbox.
+
+Removing a space is not one action but two:
+
+- **Hide / remove** keeps the local session and picture, so adding the same site again leaves you signed
+  in. Clear its local session in the browser first if you want to log out.
+- **Delete** removes the space, its alerts and its picture from Bop. On Android, "Delete + clear login"
+  additionally erases that space's website login, cookies and cache; plain Delete keeps the login in the
+  phone's WebView storage. On desktop, deleting a space always erases that space's isolated Chromium
+  profile (cookies, site storage and cache) and it cannot be undone. Neither delete touches any other
+  space's session.
 
 Uploads use Android's document picker and are sent by the website to the service you selected.
 Bop does not store an extra upload copy or hand authenticated page URLs to other apps. Camera and
