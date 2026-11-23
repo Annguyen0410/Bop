@@ -22,7 +22,7 @@ const autostart = require('./autostart.js');
 const portableJanitor = require('./portable-janitor.js');
 const storageBudget = require('./cache-budget.js');
 const threads = require('./threads.js');
-const { AccountMonitor } = require('./message-monitor.js');
+const { AccountMonitor, titleMonitoredKind } = require('./message-monitor.js');
 const notesSync = require('./notes-sync.js');
 const { randomUUID, randomBytes } = require('node:crypto');
 
@@ -540,7 +540,7 @@ function publishMessage(space, alert, incoming = 1) {
 function readTitle(id, title) {
   const space = spaces.accountFor(state, id);
   const view = spaceViews.get(id);
-  if (!space || space.kind !== 'social' || !view || !spaces.pageAllowed(space, view.webContents.getURL())) return;
+  if (!space || !titleMonitoredKind(space.kind) || !view || !spaces.pageAllowed(space, view.webContents.getURL())) return;
   const reading = monitorFor(id).title(title);
   if (!reading.changed) return;
   persistMonitor(id);

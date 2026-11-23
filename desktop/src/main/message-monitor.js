@@ -43,6 +43,22 @@ function retryDelay(failures) {
   return Math.min(30_000 * (2 ** Math.min(Math.max(failures - 1, 0), 5)), 900_000);
 }
 
+/**
+ * Which kinds of space report their tab title as an unread signal.
+ *
+ * The title is the account's own unread count rendered by the site — "(3) Inbox" — and it is the one
+ * signal every provider gives without interception, DOM scraping or a private API.
+ *
+ * `mail` is here for parity with Android: the phone build's `reportTitle` has no kind filter, so a Gmail
+ * "(3) Inbox" raised a card there while desktop `readTitle` returned early for anything that was not
+ * `social` and the mailbox showed nothing. A `tasks` space is a page to watch rather than an account to
+ * announce, and an `ai` space is deliberately left out: its title is the conversation it is showing, not
+ * a count of anything waiting.
+ */
+function titleMonitoredKind(kind) {
+  return kind === 'social' || kind === 'mail';
+}
+
 // URL paths only, never query strings or tokens. These are hints, not authentication validation.
 function loginPage(url) {
   try {
@@ -163,4 +179,4 @@ class AccountMonitor {
   saved() { return { unread: this.unread }; }
 }
 
-module.exports = { AccountMonitor, unreadCount, markerOnly, retryDelay, loginPage, PAIR_MS, MARKER_COOLDOWN_MS, MAX_SEEN };
+module.exports = { AccountMonitor, unreadCount, markerOnly, retryDelay, loginPage, titleMonitoredKind, PAIR_MS, MARKER_COOLDOWN_MS, MAX_SEEN };
