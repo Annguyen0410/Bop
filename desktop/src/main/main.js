@@ -16,6 +16,7 @@ const avatar = require('./avatar.js');
 const popup = require('./popup.js');
 const notifyLog = require('./notify-log.js');
 const clipboardBridge = require('./clipboard-bridge.js');
+const externalUrl = require('./external-url.js');
 const monitorHealth = require('./monitor-health.js');
 const autostart = require('./autostart.js');
 const portableJanitor = require('./portable-janitor.js');
@@ -119,6 +120,20 @@ function resolveTheme() {
 // The bubble's size is a setting, not a constant, so every placement reads it from state.
 const bubblePrefs = () => (state && state.bubblePrefs) || spaces.bubbleDefaults();
 const bubbleSize = () => bubblePrefs().size;
+
+/**
+ * The one way a URL leaves Bop for the operating system.
+ *
+ * Every hand-off goes through here and through the rule in [external-url]: https anywhere, plain http on
+ * a loopback host only, and nothing else. A refused URL is not opened at all — a page that tried
+ * `file:`, `smb:`, `javascript:`, `data:` or its own custom scheme gets a log line and silence. The
+ * refusal logs the scheme and host, never the path or query, because a log is something a user may share.
+ */
+function openExternal(url) {
+  return externalUrl.openExternal(shell, url, (reason, checked) => {
+    console.warn(`[bop] refused to open a link outside the app (${reason} ${checked.protocol || ''} ${checked.hostname || ''})`);
+  });
+}
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
@@ -655,7 +670,9 @@ function holdNavigation(id, url, contents, prompt = true) {
   const host = spaces.hostnameOf(url);
   const loopbackHttp = /^http:\/\//i.test(url) && ['localhost', '127.0.0.1', '::1'].includes(host);
   if (!url || (!/^https:\/\//i.test(url) && !loopbackHttp)) {
-    if (url && /^https?:\/\//i.test(url)) shell.openExternal(url);
+    // Not something Bop will ever host: hand it to the user's own browser, through the rule that
+    // refuses every scheme that is not https or loopback http.
+    void openExternal(url);
     return;
   }
   if (!prompt) return;
@@ -667,7 +684,7 @@ function holdNavigation(id, url, contents, prompt = true) {
     const current = spaces.accountFor(state, id);
     // Saying no hands the link to the system browser, which is the old, honest behaviour. A card names
     // what happened, so the empty pane is explained instead of looking broken.
-    shell.openExternal(url);
+    void openExternal(url);
     if (current) {
       pushAlert({ spaceId: id, tag: `blocked:${result.host || Date.now()}`, kind: 'blocked', title: `${current.label} kept its own sites`, body: `You did not allow ${result.host || 'that site'}, so it opened in your browser instead. Allow it from Edit if it is the panel's sign-in page.` });
     }
@@ -784,16 +801,21 @@ function spaceView(id) {
     },
   });
   contents.setWindowOpenHandler(({ url, frameName }) => {
-    if (spaces.pageAllowed(spaces.accountFor(state, id), url)) return childOptions();
-    if (!url.startsWith('https://')) {
-      shell.openExternal(url);
+    // One rule for what a page may open. An allowed page gets its window inside this space, an https
+    // page somewhere else is asked about, and everything else is a link out of the app — through the one
+    // validated hand-off, which refuses `file:`, `smb:`, `javascript:`, `data:` and every custom scheme
+    // a page could name. A remote page must never reach an operating-system protocol handler.
+    const action = externalUrl.windowOpenAction(url, { allowed: spaces.pageAllowed(spaces.accountFor(state, id), url) });
+    if (action === 'child') return childOptions();
+    if (action === 'external') {
+      void openExternal(url);
       return { action: 'deny' };
     }
     const key = `${id}\n${url}`;
     if (trustedPopups.delete(key)) return childOptions();
     void requestHostPermission(id, url, { popup: true }).then((result) => {
       if (!result.allowed) {
-        shell.openExternal(url);
+        void openExternal(url);
         const current = spaces.accountFor(state, id);
         if (current) {
           pushAlert({ spaceId: id, tag: `blocked:${result.host || Date.now()}`, kind: 'blocked', title: `${current.label} blocked a sign-in window`, body: `${result.host || 'That site'} was not allowed, so the window opened in your browser instead.` });
@@ -805,7 +827,7 @@ function spaceView(id) {
       if (!contents.isDestroyed()) {
         contents.executeJavaScript(`window.open(${JSON.stringify(url)}, ${JSON.stringify(frameName || '_blank')})`, true).catch(() => {
           trustedPopups.delete(key);
-          shell.openExternal(url);
+          void openExternal(url);
         });
       }
     });
@@ -820,7 +842,7 @@ function spaceView(id) {
     // The popup is a browser window for this sign-in only: an outside link goes back to the system
     // browser, and a second popup is refused rather than multiplying windows nobody asked for.
     childContents.setWindowOpenHandler(({ url }) => {
-      if (url.startsWith('https://')) shell.openExternal(url);
+      void openExternal(url);
       return { action: 'deny' };
     });
     // A sign-in window can itself redirect (Google does). It gets the same per-space question instead
@@ -2365,24 +2387,16 @@ function registerIpc() {
     if (!space || space.kind !== 'ai' || !app || app.kind !== 'ai' || !/^https:\/\//i.test(app.home)) {
       return { ok: false, error: 'This AI space is unavailable.' };
     }
-    try {
-      await shell.openExternal(app.home);
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, error: String(error?.message || error).slice(0, 160) };
-    }
+    const opened = await openExternal(app.home);
+    return opened.ok ? { ok: true } : { ok: false, error: opened.reason };
   });
   ipcMain.handle('bop:open-site-in-browser', async (_event, id) => {
     const space = spaces.accountFor(state, id);
     if (!space) return { ok: false, error: 'This space is unavailable.' };
     const url = spaces.homeFor(space);
     if (!url || !spaces.pageAllowed(space, url)) return { ok: false, error: 'This site cannot be opened safely.' };
-    try {
-      await shell.openExternal(url);
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, error: String(error?.message || error).slice(0, 160) };
-    }
+    const opened = await openExternal(url);
+    return opened.ok ? { ok: true } : { ok: false, error: opened.reason };
   });
   ipcMain.handle('bop:close-space', () => { closeSpace(); return { ok: true }; });
   ipcMain.handle('bop:reload-space', (_event, id) => {
@@ -2429,10 +2443,7 @@ function registerIpc() {
     return { ok: true };
   });
   ipcMain.handle('bop:clear-alerts', () => { alerts = []; broadcast(); return { ok: true }; });
-  ipcMain.handle('bop:open-external', (_event, url) => {
-    if (typeof url === 'string' && /^https:\/\//.test(url)) shell.openExternal(url);
-    return { ok: true };
-  });
+  ipcMain.handle('bop:open-external', (_event, url) => openExternal(url));
 
   // A click on the reminder card opens the account it names and counts that alert as seen; × only
   // hides the card, so the alert stays unread in the list.
