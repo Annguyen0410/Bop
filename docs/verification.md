@@ -31,6 +31,30 @@ The probe scripts under `desktop/tools/` (`probe-stage.js`, `probe-bisect.js`, `
 `probe-sibling.js`, `clipboard-probe.js`) are dev-only measurements for this round; they are not part of
 the packaged app and not part of the shipped verification harness.
 
+### What is inside a release build (23 November 2026)
+
+The verification harness used to ship inside the product (`build.files` reached `src/**`, where
+`monitor-smoke.js`, `retry-smoke.js` and `reader-smoke.js` lived) and `--bop-live-check` made the settings
+store write plaintext JSON in **any** build. The harnesses now live in `desktop/verify/`, every
+verification flag is inert in a packaged build, and the settings codec refuses plaintext when packaged.
+
+| Check | Result | Command / evidence |
+| --- | --- | --- |
+| Files inside the packaged app | **43 files**, only `package.json` + `src/main` + `src/renderer`; **0** smoke/live-check/probe files | `node -e "require('@electron/asar').listPackage('dist-portable-final/win-unpacked/resources/app.asar')"` |
+| Packaged build on Electron 45.4.1 | built: `dist-portable-final/Bop-0.2.8-portable.exe`, `win-unpacked/Bop.exe` | `npm run dist:portable` (electron-builder 26.15.3) |
+| Verification flags when packaged | inert, and the run logs which flags it ignored | `test/verification-mode.test.js` (5 cases) |
+| Plaintext settings when packaged | refused even when a harness asks: the payload is never raw JSON | `test/settings-codec.test.js` (6 cases) |
+| Packaged file list | harnesses outside the packaged patterns, scripts point at `verify/`, every relative `require` in main.js resolves | `test/packaged-files.test.js` (4 cases) |
+| Desktop unit tests after the round | **1141 passed**, 0 failed | `npm test` |
+| Desktop functional smoke, real Electron | **SMOKE OK, 51 steps** | `env -u ELECTRON_RUN_AS_NODE npm run smoke` |
+| Desktop integration harness, real Electron | **ok: true**, 21 checks, exit 0, 19 notification attempts | `env -u ELECTRON_RUN_AS_NODE electron . --bop-monitor-smoke --bop-out tmp/monitor-smoke-verify` |
+| Packaged build launched with `--bop-smoke --bop-live-check` | **UNVERIFIED** — this session's safety reviewer refused to launch a packaged build with verification flags, so no runtime run of it exists | run by hand: `desktop\dist-portable-final\win-unpacked\Bop.exe --user-data-dir=%TEMP%\bop-inert\profile --bop-smoke --bop-live-check --bop-out %TEMP%\bop-inert\out` and expect **no** `smoke.json`, an untouched normal launch, and a `bop-settings.bin` in the profile that does not begin with `{` |
+
+**Consequence to know about:** driving a *packaged* build through the acceptance harness is no longer
+possible — `npm run smoke:live:exe` and `tools/startup-check.ps1` pass `--bop-live-check`, which a release
+build now ignores. Verification of a release build is: it launches, its file list is clean (the asar check
+above), and its settings stay sealed. The live check keeps working against the source tree.
+
 ## Android + Windows, reliability round (12 November 2026)
 
 Asked for: make Messenger and Instagram work in the embedded WebView again, check the layout migration and

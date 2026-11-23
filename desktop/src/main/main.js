@@ -73,11 +73,18 @@ const JANITOR_SWEEP_MS = 4 * 60 * 60 * 1000;
 // app. The acceptance run reports its startup numbers against it — see [recordStartup].
 const APP_STARTED_AT = Date.now();
 
-const MONITOR_SMOKE = process.argv.includes('--bop-monitor-smoke');
-// Waits out the real 930-second retry ladder; see retry-smoke.js.
-const RETRY_SMOKE = process.argv.includes('--bop-retry-smoke');
-const SMOKE = process.argv.includes('--bop-smoke') || MONITOR_SMOKE || RETRY_SMOKE;
-const LIVE_CHECK = process.argv.includes('--bop-live-check');
+// Which verification run this process is, if any. A packaged build is inert to every one of these
+// flags: the harnesses live in desktop/verify/ and are not shipped, and a release build must run the
+// product whatever the command line says. See [resolveVerificationMode] and test/verification-mode.test.js.
+const verification = require('./verification-mode.js').resolveVerificationMode(process.argv, { isPackaged: app.isPackaged });
+if (verification.ignored.length) {
+  console.warn(`[bop] release build: these verification flags are inert here: ${verification.ignored.join(' ')}`);
+}
+const MONITOR_SMOKE = verification.monitorSmoke;
+// Waits out the real 930-second retry ladder; see verify/retry-smoke.js.
+const RETRY_SMOKE = verification.retrySmoke;
+const SMOKE = verification.smoke;
+const LIVE_CHECK = verification.liveCheck;
 
 // Every verification run (`--bop-smoke`, `--bop-monitor-smoke`, `--bop-retry-smoke`, `--bop-live-check`)
 // drives the app against a fixture on 127.0.0.1. On a machine whose network settings ask Chromium to
@@ -87,8 +94,8 @@ const LIVE_CHECK = process.argv.includes('--bop-live-check');
 // The flag is scoped to verification runs on purpose: a real user's spaces are remote https pages and must
 // keep using whatever proxy the machine is configured with.
 if (SMOKE || LIVE_CHECK) app.commandLine.appendSwitch('no-proxy-server');
-const SMOKE_ACTIVE = process.argv.includes('--bop-active'); // smoke with a visible window, used for capture
-const LIVE_OUT_ARG = process.argv.includes('--bop-out') ? process.argv[process.argv.indexOf('--bop-out') + 1] : null;
+const SMOKE_ACTIVE = verification.active; // smoke with a visible window, used for capture
+const LIVE_OUT_ARG = verification.out;
 const LIVE_USER_DATA_ARG = process.env.BOP_LIVE_USER_DATA || process.argv.find((argument) => argument.startsWith('--user-data-dir='))?.slice('--user-data-dir='.length) || null;
 const LIVE_SETTINGS_ARG = process.env.BOP_LIVE_SETTINGS;
 // The operating system started this copy at sign-in. Nothing was clicked, so the dashboard stays out of
@@ -96,7 +103,7 @@ const LIVE_SETTINGS_ARG = process.env.BOP_LIVE_SETTINGS;
 const LAUNCHED_AT_LOGIN = !SMOKE && !LIVE_CHECK && autostart.launchedAtLogin(process.argv);
 // Resolved, because it becomes a `userData` directory: a relative `--bop-out ./out` used to fail the whole
 // run at `app.setPath` with "Path must be absolute" before the harness could report anything.
-const SMOKE_OUT = path.resolve(LIVE_OUT_ARG || valueAfter('--bop-out') || path.join(app.getPath('userData'), 'smoke'));
+const SMOKE_OUT = path.resolve(LIVE_OUT_ARG || path.join(app.getPath('userData'), 'smoke'));
 const SIDEBAR = 320;
 
 /** Shown on a space card when the page answered by refusing the browser instead of serving itself. */
@@ -133,11 +140,6 @@ function openExternal(url) {
   return externalUrl.openExternal(shell, url, (reason, checked) => {
     console.warn(`[bop] refused to open a link outside the app (${reason} ${checked.protocol || ''} ${checked.hostname || ''})`);
   });
-}
-
-function valueAfter(flag) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : null;
 }
 
 // Verification runs must never read or write the real Bop settings: a leftover watch fingerprint from
@@ -207,21 +209,24 @@ const notesStorePath = () => `${settingsPath()}.notes`;
 /** The settings file without notes is small; anything near this bound is a corrupt or hand-edited file. */
 const SETTINGS_MAX_BYTES = 1_000_000;
 
+const settingsCodec = require('./settings-codec.js');
+
 function decodeSettings(raw) {
-  if (raw.slice(0, 4).toString('utf8') === 'BOP0') return raw.slice(4).toString('utf8');
-  if (LIVE_CHECK) return raw.toString('utf8');
-  return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(raw) : null;
+  return settingsCodec.decodeSettings(raw, {
+    decrypt: safeStorage.isEncryptionAvailable() ? (payload) => safeStorage.decryptString(payload) : null,
+    plaintext: LIVE_CHECK,
+    packaged: app.isPackaged,
+  });
 }
 
 /** Serialises and seals one store. Returns null instead of allocating past [limit] bytes. */
 function encodeSettings(value, limit) {
-  const json = JSON.stringify(value);
-  const bytes = Buffer.byteLength(json, 'utf8');
-  if (bytes > limit) return null;
-  const payload = LIVE_CHECK ? Buffer.from(json, 'utf8')
-    : safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(json)
-      : Buffer.concat([Buffer.from('BOP0', 'utf8'), Buffer.from(json, 'utf8')]);
-  return { payload, bytes };
+  return settingsCodec.encodeSettings(value, {
+    limit,
+    encrypt: safeStorage.isEncryptionAvailable() ? (json) => safeStorage.encryptString(json) : null,
+    plaintext: LIVE_CHECK,
+    packaged: app.isPackaged,
+  });
 }
 
 /**
@@ -2651,6 +2656,9 @@ function createTray() {
 }
 
 async function smokeRun() {
+  // Belt and braces on top of [resolveVerificationMode]: even if a flag ever reached here, a release
+  // build must not run a harness. The harnesses themselves are not shipped (test/packaged-files.test.js).
+  if (app.isPackaged) throw new Error('a release build must not run the verification harness');
   const steps = SMOKE_STEPS;
   const record = (name, detail) => { steps.push({ name, detail }); process.stdout.write(`smoke step ${name}: ${detail}\n`); };
 
@@ -3630,8 +3638,8 @@ if (singleInstance) app.whenReady().then(async () => {
         notificationDiagnostics: () => ({ ...notificationDiagnostics }),
         mute: value => { state = { ...state, messageSound: !value }; },
         };
-        if (MONITOR_SMOKE) await require('./monitor-smoke.js')(monitorApi);
-        else await require('./retry-smoke.js')(monitorApi);
+        if (MONITOR_SMOKE) await require('../../verify/monitor-smoke.js')(monitorApi);
+        else await require('../../verify/retry-smoke.js')(monitorApi);
       } else await smokeRun();
       app.exit(0);
     } catch (failure) {

@@ -9,8 +9,9 @@
  * It is still not a real site: no login, no service markup. What it can and cannot prove is written down
  * in docs/scanning.md rather than implied by a green run.
  *
- * It lives beside the other smoke script (src/main/monitor-smoke.js) on purpose: Node's test runner
- * globs everything under test/, and this file needs Electron, not plain Node.
+ * It lives in desktop/verify beside the other smoke scripts on purpose: Node's test runner globs
+ * everything under test/, and this file needs Electron, not plain Node. Nothing under verify/ is
+ * packaged into a release build — see test/packaged-files.test.js.
  *
  *   npm run smoke:unread -- --report=docs/evidence/scanning/reader-smoke.json
  */
@@ -21,8 +22,8 @@ const path = require('node:path');
 
 // The exact asset the WebView injects. Read from the app, never copied: a copy that drifts is the bug
 // this smoke exists to catch.
-const READER = path.join(__dirname, '..', '..', '..', 'app', 'src', 'main', 'assets', 'unread-reader.js');
-const FIXTURE = path.join(__dirname, '..', '..', 'test', 'fixtures', 'unread-fixture.html');
+const READER = path.join(__dirname, '..', '..', 'app', 'src', 'main', 'assets', 'unread-reader.js');
+const FIXTURE = path.join(__dirname, '..', 'test', 'fixtures', 'unread-fixture.html');
 
 const fixtureSite = {
   mode: 'dom',

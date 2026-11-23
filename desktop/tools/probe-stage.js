@@ -5,7 +5,7 @@ const out = (value) => { process.stdout.write(JSON.stringify(value, null, 2) + '
 const path = require('node:path');
 const { app } = require('electron');
 if (stage === 1) {
-  out({ stage, versions: process.versions });
+  out({ stage, versions: process.versions, userData: app.getPath('userData'), isPackaged: app.isPackaged });
   app.exit(0);
 } else if (stage === 2) {
   const { clipboard } = require('electron');
