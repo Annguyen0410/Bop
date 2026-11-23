@@ -236,7 +236,10 @@ function revokeHost(state, id, host) {
 
 function hostnameOf(url) {
   try {
-    return new URL(url).hostname.toLowerCase() || null;
+    // WHATWG keeps the brackets of an IPv6 literal (`[::1]`), while every check here and in main.js
+    // compares against the bare form (`::1`): without this, the documented loopback allowance for a
+    // plain-http panel could never fire on an IPv6 address. One normalisation, one truth.
+    return new URL(url).hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '') || null;
   } catch (_) {
     return null;
   }
