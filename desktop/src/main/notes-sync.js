@@ -10,6 +10,11 @@ const MAX_IMAGE_BYTES = 500_000;
 const MAX_TOTAL_BYTES = 5_000_000;
 const MAX_FRAME_BYTES = 9_000_000;
 const PORT = 38671;
+/**
+ * How much a peer may knock. One sync is one short connection, so these numbers are generous for a
+ * phone that pushes every few seconds and tight for anything that opens sockets in a loop.
+ */
+const RATE_LIMITS = { windowMs: 60_000, perPeer: 12, maxConcurrent: 8 };
 const AAD = Buffer.from('Bop LAN notes v1');
 const TOKEN_PATTERN = /^[a-f0-9]{64}$/i;
 const ID_PATTERN = /^[A-Za-z0-9_-]{8,80}$/;
@@ -34,6 +39,43 @@ function localAddresses() {
   return [...new Set(Object.values(os.networkInterfaces()).flatMap((entries) =>
     (entries || []).filter((entry) => !entry.internal && entry.family === 'IPv4')
       .map((entry) => normalizeHost(entry.address)).filter(Boolean)))].sort();
+}
+
+/**
+ * What the notes server binds: loopback (the desktop syncs with itself through the same listener) plus
+ * this machine's own private interfaces. Never `0.0.0.0` and never a public address — the port must not
+ * be reachable from outside the local network in the first place, whatever the peer check does with a
+ * connection that arrives.
+ */
+function listenHosts() {
+  return ['127.0.0.1', ...localAddresses()];
+}
+
+/**
+ * Decides whether one more connection is welcome: bounded in total and per peer over a rolling window.
+ * A peer that is refused is simply not answered; the frame protocol and the pairing are untouched.
+ */
+function connectionAdmission(limits = RATE_LIMITS) {
+  const windowMs = Number(limits && limits.windowMs) > 0 ? Number(limits.windowMs) : RATE_LIMITS.windowMs;
+  const perPeer = Number(limits && limits.perPeer) > 0 ? Number(limits.perPeer) : RATE_LIMITS.perPeer;
+  const maxConcurrent = Number(limits && limits.maxConcurrent) > 0 ? Number(limits.maxConcurrent) : RATE_LIMITS.maxConcurrent;
+  const seen = new Map(); // peer -> accepted timestamps inside the window
+  let open = 0;
+  return {
+    admit(peer) {
+      const now = Date.now();
+      if (open >= maxConcurrent) return false;
+      const key = String(peer || 'unknown');
+      const times = (seen.get(key) || []).filter((at) => now - at < windowMs);
+      if (times.length >= perPeer) { seen.set(key, times); return false; }
+      times.push(now);
+      seen.set(key, times);
+      open += 1;
+      return true;
+    },
+    release() { open = Math.max(0, open - 1); },
+    get open() { return open; },
+  };
 }
 
 function keyFor(token) {
@@ -187,13 +229,27 @@ function parsePairingCode(code) {
   return host ? { host, port: PORT, token: match[2] } : null;
 }
 
-function createServer({ token, getNotes, onNotes, port = PORT, host = '0.0.0.0' }) {
+function createServer({ token, getNotes, onNotes, port = PORT, host, hosts, limits = RATE_LIMITS }) {
   keyFor(token);
-  if (typeof getNotes !== 'function' || typeof onNotes !== 'function' || !Number.isInteger(port) || port < 0 || port > 65535 || typeof host !== 'string') {
+  if (typeof getNotes !== 'function' || typeof onNotes !== 'function' || !Number.isInteger(port) || port < 0 || port > 65535) {
     throw new TypeError('invalid notes server configuration');
   }
-  const server = net.createServer((socket) => {
-    if (!privateAddress(socket.remoteAddress)) { socket.destroy(); return; }
+  // What to bind: loopback (the desktop syncs with itself through this same listener) and this
+  // machine's own private interfaces. Never `0.0.0.0`, never a public address — a caller that asks for
+  // one is refused instead of served, because the port must not be reachable from outside the local
+  // network in the first place. The private-peer check below stays as a second line.
+  const requested = Array.isArray(hosts) && hosts.length ? hosts.map(String)
+    : (typeof host === 'string' && host ? [host] : listenHosts());
+  const listenOn = [...new Set(requested)];
+  for (const address of listenOn) {
+    if (!normalizeHost(address) && address !== 'localhost') {
+      throw new TypeError('the notes server binds private addresses only');
+    }
+  }
+  const admission = connectionAdmission(limits);
+  const servers = listenOn.map(() => net.createServer((socket) => {
+    if (!privateAddress(socket.remoteAddress) || !admission.admit(socket.remoteAddress)) { socket.destroy(); return; }
+    socket.once('close', () => admission.release());
     socket.setTimeout(10_000, () => socket.destroy());
     let frame = '';
     socket.on('data', (chunk) => {
@@ -222,29 +278,30 @@ function createServer({ token, getNotes, onNotes, port = PORT, host = '0.0.0.0' 
         socket.end(`${seal(token, { error: 'invalid pairing or request' })}\n`);
       }
     });
-  });
+  }));
   return {
     start() {
-      return new Promise((resolve, reject) => {
+      return Promise.all(servers.map((server, index) => new Promise((resolve, reject) => {
         const onError = (error) => { server.removeListener('listening', onListening); reject(error); };
         const onListening = () => { server.removeListener('error', onError); resolve(server.address()); };
         server.once('error', onError);
         server.once('listening', onListening);
-        server.listen(port, host);
-      });
+        server.listen(port, listenOn[index]);
+      }))).then((bound) => ({ ...bound[0], hosts: listenOn }));
     },
     close() {
-      return new Promise((resolve, reject) => {
+      return Promise.all(servers.map((server) => new Promise((resolve, reject) => {
         if (!server.listening) return resolve();
         server.close((error) => error ? reject(error) : resolve());
-      });
+      }))).then(() => undefined);
     },
     addresses: localAddresses,
   };
 }
 
 module.exports = {
-  MAX_MESSAGES, MAX_TEXT, MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, MAX_FRAME_BYTES, PORT,
-  normalizeNote, mergeNotes, mergeNotesIncludingDeleted, isPrivatePeer: privateAddress, normalizeHost, localAddresses,
+  MAX_MESSAGES, MAX_TEXT, MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, MAX_FRAME_BYTES, PORT, RATE_LIMITS,
+  normalizeNote, mergeNotes, mergeNotesIncludingDeleted, isPrivatePeer: privateAddress, normalizeHost, localAddresses, listenHosts,
+  connectionAdmission,
   keyFor, seal, open, syncWithDesktop, makePairingCode, parsePairingCode, createServer,
 };

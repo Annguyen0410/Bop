@@ -34,11 +34,13 @@ Notes are stored locally — on desktop in their own store beside the settings, 
 operating system's key store when one is available (Settings → Diagnostics says plainly when it is not).
 
 When you turn on **LAN sync** in the notes window, the desktop app opens a TCP listener on your local
-network (port 38671) and accepts connections only from private-range addresses; anything else is dropped.
-Your phone pairs with it using a code, and note text and note images then move phone ↔ desktop over your
-own network, encrypted with AES-256-GCM. This is the single exception to "nothing leaves the device": it
-is off until you enable it, it never talks to the internet or to any Bop server (there is none), and
-turning it off stops the listener.
+network (port 38671, bound to your own local-network addresses and loopback only, and refusing to bind a
+public address) and accepts connections only from private-range addresses; anything else is dropped, and
+connections are rate-limited per peer. Your phone pairs with it using a code, and note text and note
+images then move phone ↔ desktop over your own network, encrypted with AES-256-GCM. This is the single
+exception to "nothing leaves the device": it is off until you enable it, it never talks to the internet
+or to any Bop server (there is none), and turning it off stops the listener. Windows may show a firewall
+prompt the first time — that is the operating system asking about the local listener.
 
 ## Notification access
 

@@ -137,7 +137,10 @@ Read this part before installing. Everything below is measured, not promised.
   TCP listener on your local network (port 38671, private-range addresses only) and your phone pairs with
   it with a code, after which note text and note images do move phone ↔ desktop over your own Wi-Fi,
   encrypted with AES-256-GCM. It is off until you enable it, it never reaches the internet, and turning it
-  off stops the listener. Nothing else in Bop opens a port or makes a connection of its own.
+  off stops the listener. The desktop listener is bound to your own local-network addresses and loopback
+  only and refuses a public bind, so the port is not reachable from outside your network; Windows may show
+  you a firewall prompt the first time you turn it on, which is the operating system asking about that
+  local listener. Nothing else in Bop opens a port or makes a connection of its own.
 
 ## Two apps, two jobs
 
