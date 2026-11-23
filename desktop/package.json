@@ -66,7 +66,7 @@
     }
   },
   "devDependencies": {
-    "electron": "^38.0.0",
+    "electron": "45.4.1",
     "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1"
   }

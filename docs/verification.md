@@ -1,5 +1,36 @@
 # Bop — verification and delivery
 
+## Desktop moves to Electron 45.4.1 (23 November 2026)
+
+Asked for: leave the end-of-life Electron 38 line for the newest supported stable, without losing a
+feature, and prove it on the real app.
+
+**Result:** Electron **45.4.1** (Chromium **156.0.8078.100**, embedded Node **24.22.3**). The upgrade
+itself broke one feature — Electron 45 removed `clipboard.readImage()`, which "Paste image" in the notes
+called — and that is fixed and regression-tested in the same change. The three synchronous `safeStorage`
+methods Bop uses are deprecated on this version (warnings appear in the smoke log) but still work; the
+async migration is listed as a follow-up rather than pretended away.
+
+Environment: Windows 11 build 26200 (MSYS/Git Bash), Node.js v26.13.0, npm 11.20.0, run from `desktop/`.
+On this machine `ELECTRON_RUN_AS_NODE` is set in the shell, which makes `electron` behave like plain Node;
+every Electron command below is prefixed with `env -u ELECTRON_RUN_AS_NODE` because of that.
+
+| Check | Result | Command / evidence |
+| --- | --- | --- |
+| Supported majors on the day | 43 / 44 / 45 stable, 46 prerelease; 38 EOL since 2026-03-10 | `curl -s https://releases.electronjs.org/schedule.json` |
+| Electron binary | **45.4.1** | `env -u ELECTRON_RUN_AS_NODE node_modules/electron/dist/electron.exe --version` → `v45.4.1` |
+| Chromium / embedded Node | **156.0.8078.100** / **24.22.3** | `process.versions` from `electron tools/probe-stage.js 1`; the smoke's own user-agent step reports the same Chrome/156.0.8078.100 |
+| Desktop unit tests | **1113 passed**, 0 failed (was 1106 before the 7 clipboard cases) | `npm test` |
+| Desktop functional smoke, real Electron | **SMOKE OK, 51 steps**, `missingFiles: []` | `env -u ELECTRON_RUN_AS_NODE npm run smoke` |
+| Desktop integration harness, real Electron | **ok: true**, 21 checks, exit 0, 19 OS notification requests, 0 failed | `env -u ELECTRON_RUN_AS_NODE electron . --bop-monitor-smoke --bop-out tmp/monitor-smoke-45` → `tmp/monitor-smoke-45/monitor-smoke.json` |
+| Notes paste-image on the rearchitected clipboard | real 64×64 PNG written with `ClipboardItem`, read back through `clipboard-bridge.js`: `roundTripped: true` | `env -u ELECTRON_RUN_AS_NODE electron tools/clipboard-probe.js` |
+| `clipboard.readImage` on Electron 45 | **removed** — `typeof clipboard.readImage === "undefined"`, `clipboard.read` is the replacement | `env -u ELECTRON_RUN_AS_NODE electron tools/probe-stage.js 2` |
+| Sandboxed preload surface | `process.argv`, `process.isMainFrame`, `ipcRenderer` present; `Buffer` and relative `require` **gone** | `env -u ELECTRON_RUN_AS_NODE electron tools/probe-bisect.js d` |
+
+The probe scripts under `desktop/tools/` (`probe-stage.js`, `probe-bisect.js`, `probe-preload.js`,
+`probe-sibling.js`, `clipboard-probe.js`) are dev-only measurements for this round; they are not part of
+the packaged app and not part of the shipped verification harness.
+
 ## Android + Windows, reliability round (12 November 2026)
 
 Asked for: make Messenger and Instagram work in the embedded WebView again, check the layout migration and

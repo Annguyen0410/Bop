@@ -15,6 +15,7 @@ const bubbleDrag = require('./bubble-drag.js');
 const avatar = require('./avatar.js');
 const popup = require('./popup.js');
 const notifyLog = require('./notify-log.js');
+const clipboardBridge = require('./clipboard-bridge.js');
 const monitorHealth = require('./monitor-health.js');
 const autostart = require('./autostart.js');
 const portableJanitor = require('./portable-janitor.js');
@@ -2117,8 +2118,8 @@ function registerIpc() {
   ipcMain.handle('bop:snapshot', () => snapshot());
   ipcMain.handle('bop:notes-snapshot', () => ({ notes: state.notes, notesSync: snapshot().notesSync, theme: resolveTheme() }));
   ipcMain.handle('bop:notes-paste-image', async () => {
-    const image = clipboard.readImage();
-    if (image.isEmpty()) return { ok: false, error: 'No image was found on the clipboard.' };
+    const image = await clipboardBridge.readClipboardImage(clipboard, nativeImage);
+    if (!image) return { ok: false, error: 'No image was found on the clipboard.' };
     const size = image.getSize();
     const resized = size.width > 1280 || size.height > 1280
       ? image.resize({ width: Math.min(1280, size.width), height: Math.min(1280, size.height), quality: 'good' }) : image;
@@ -2130,7 +2131,7 @@ function registerIpc() {
     if (!state.notesEnabled || !state.notesToken) return { ok: false, error: 'Start LAN sync before pairing.' };
     const pairing = notesSync.makePairingCode(state.notesToken);
     if (!pairing.code) return { ok: false, error: 'No private Wi‑Fi address is available.' };
-    clipboard.writeText(pairing.code);
+    await clipboardBridge.writeClipboardText(clipboard, pairing.code);
     return { ok: true, addresses: pairing.addresses, port: pairing.port };
   });
   ipcMain.handle('bop:notes-delete', (_event, id) => {
