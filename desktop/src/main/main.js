@@ -769,7 +769,12 @@ function spaceView(id) {
       preload: spacePreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      // Sandboxed, like every other surface. This preload needs `require('electron')`, `process.argv`
+      // and `process.isMainFrame` and nothing else — no Node module, no Buffer — so there is no reason
+      // to hand a remote page an unsandboxed renderer. Measured on Electron 45.4.1: a sandboxed preload
+      // keeps those three and loses relative `require`, which is why the notification bridge is inlined
+      // in space-preload.js. test/sandbox-surface.test.js keeps this true for every surface.
+      sandbox: true,
       // "Keep pages alive" (on by default). Measured on this build: with the default throttling, every
       // space pane reported `document.visibilityState === 'hidden'` and a 100 ms timer fired ten times
       // per ten seconds, because a WebContentsView is never told it became visible. A chat page in that
@@ -796,7 +801,10 @@ function spaceView(id) {
       webPreferences: {
         session: sessionFor(id), preload: spacePreloadPath(),
         additionalArguments: [`--bop-space=${id}`],
-        contextIsolation: true, nodeIntegration: false, sandbox: false,
+        // The sign-in popup matches its opener's sandbox state on purpose: when a child differs,
+        // Electron 45 gives it its own renderer process and the opener relationship the replayed
+        // `window.open` depends on does not survive.
+        contextIsolation: true, nodeIntegration: false, sandbox: true,
       },
     },
   });
@@ -1038,7 +1046,7 @@ function createShellWindow() {
     // Throttled like any hidden page. This renderer draws the dashboard and has no monitoring duty — the
     // space views and the watcher live in this process — so a hub behind other windows has no reason to
     // keep a full-rate compositor. See [spaceView] for why the space views are the exception.
-    webPreferences: { preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: false },
+    webPreferences: { preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   shellWindow.contentView.addChildView(uiView);
   uiView.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
@@ -1401,7 +1409,7 @@ function createBubble() {
     hasShadow: false,
     show: false,
     focusable: true,
-    webPreferences: { preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: false },
+    webPreferences: { preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   bubbleWindow.setAlwaysOnTop(true, 'floating');
   bubbleWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: prefs.overFullscreen });
@@ -1592,7 +1600,7 @@ function openSpaceMenu() {
     // colour — on this Windows build a frameless window gets no rounded corners of its own.
     transparent: true, show: false, hasShadow: false,
     webPreferences: {
-      preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: false,
+      preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: true,
       additionalArguments: [`--bop-theme=${resolveTheme()}`],
     },
   });
@@ -1655,7 +1663,7 @@ function showReminder(alert) {
       frame: false, resizable: false, movable: false, minimizable: false, maximizable: false,
       skipTaskbar: true, alwaysOnTop: true, hasShadow: true, show: false,
       webPreferences: {
-        preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: false,
+        preload: preloadPath(), contextIsolation: true, nodeIntegration: false, sandbox: true,
         additionalArguments: [`--bop-theme=${resolveTheme()}`],
       },
     });
@@ -2130,7 +2138,7 @@ function openNotesWindow() {
   notesWindow = new BrowserWindow({ width: 660, height: 760, minWidth: 420, minHeight: 480,
     title: 'Bop · Quick notes', backgroundColor: '#F7F5FA',
     webPreferences: { preload: path.join(__dirname, 'notes-preload.js'), contextIsolation: true,
-      nodeIntegration: false, sandbox: false, additionalArguments: [`--bop-theme=${resolveTheme()}`] },
+      nodeIntegration: false, sandbox: true, additionalArguments: [`--bop-theme=${resolveTheme()}`] },
   });
   notesWindow.loadFile(path.join(__dirname, '..', 'renderer', 'notes.html'));
   notesWindow.on('closed', () => { notesWindow = null; });
