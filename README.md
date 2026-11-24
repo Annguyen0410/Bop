@@ -45,14 +45,14 @@ moving from one ID to the other is a fresh start by design, and the IDs are not 
 
 ## Download and run
 
-Every file is an asset of the latest release, **[Bop 0.2.8](https://github.com/Annguyen0410/Bop/releases/latest)**.
+Every file is an asset of the latest release, **[Bop 0.3.0](https://github.com/Annguyen0410/Bop/releases/latest)**.
 
 | Platform | Download | Notes |
 | --- | --- | --- |
-| **Windows 10/11 x64 — portable** | [`Bop-0.2.8-portable.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-portable.exe) | One self-contained file. No installer, nothing added to Program Files. Your spaces and logins live in `%APPDATA%\Bop` and survive an upgrade. |
-| **Windows 10/11 x64 — installer** | [`Bop-0.2.8-setup.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-0.2.8-setup.exe) | Per-user installer. Choose this one if you start Bop often. Uninstall from Settings → Apps. |
-| **Android — 7.0 (API 24) or newer, debug** | [`Bop-2.1.1-android-debug.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-debug.apk) | Debug APK, installable for testing. Installs and runs on Android 7+, but **a web space needs Android 9 (API 28)**: `WebSessionPolicy.MIN_ANDROID` refuses below it, because separate browser storage needs it. On Android 7–8 you get the app catalog and notification cards only, and a web slot says why instead of opening. |
-| **Android — 7.0 (API 24) or newer, unsigned** | [`Bop-2.1.1-android-release-unsigned.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.2.8/Bop-2.1.1-android-release-unsigned.apk) | Release APK is **unsigned**: sign it with your own key before installing it or handing it to anyone. Same Android 7+ install / Android 9+ web-space rule as the debug APK. |
+| **Windows 10/11 x64 — portable** | [`Bop-0.3.0-portable.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.3.0/Bop-0.3.0-portable.exe) | One self-contained file. No installer, nothing added to Program Files. Your spaces and logins live in `%APPDATA%\Bop` and survive an upgrade. |
+| **Windows 10/11 x64 — installer** | [`Bop-0.3.0-setup.exe`](https://github.com/Annguyen0410/Bop/releases/download/v0.3.0/Bop-0.3.0-setup.exe) | Per-user installer. Choose this one if you start Bop often. Uninstall from Settings → Apps. |
+| **Android — 7.0 (API 24) or newer, debug** | [`Bop-2.2.0-android-debug.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.3.0/Bop-2.2.0-android-debug.apk) | Debug APK, installable for testing. Installs and runs on Android 7+, but **a web space needs Android 9 (API 28)**: `WebSessionPolicy.MIN_ANDROID` refuses below it, because separate browser storage needs it. On Android 7–8 you get the app catalog and notification cards only, and a web slot says why instead of opening. |
+| **Android — 7.0 (API 24) or newer, unsigned** | [`Bop-2.2.0-android-release-unsigned.apk`](https://github.com/Annguyen0410/Bop/releases/download/v0.3.0/Bop-2.2.0-android-release-unsigned.apk) | Release APK is **unsigned**: sign it with your own key before installing it or handing it to anyone. Same Android 7+ install / Android 9+ web-space rule as the debug APK. |
 
 **First launch on Windows will warn you.** Neither file is code-signed, so SmartScreen shows *“Windows
 protected your PC”* — choose **More info → Run anyway**, or sign the build with your own certificate. Bop
@@ -62,8 +62,8 @@ sign into.
 Check the download before you run it:
 
 ```bash
-sha256sum Bop-0.2.8-portable.exe
-sha256sum Bop-0.2.8-setup.exe
+sha256sum Bop-0.3.0-portable.exe
+sha256sum Bop-0.3.0-setup.exe
 ```
 
 ## The first five minutes (desktop)
@@ -258,8 +258,8 @@ Needs Node.js and, for the Android app, a JDK and the Android SDK.
 # Desktop (Electron) — Windows x64
 cd desktop
 npm ci
-npm test                                       # the unit suite (1155 subtests at 0.2.8)
-npm run smoke                                  # the functional smoke against the source (51 steps at 0.2.8)
+npm test                                       # the unit suite (1167 subtests at 0.3.0)
+npm run smoke                                  # the functional smoke against the source (51 steps at 0.3.0)
 npm run dist:portable                          # -> dist-portable-final/Bop-<version>-portable.exe, one file
 npm run dist                                   # -> dist/Bop-<version>-portable.exe and Bop-<version>-setup.exe
 npm run smoke:live                             # live check against the source tree
@@ -290,7 +290,7 @@ SITE_URL=https://your.domain npm run build         # canonical URL, absolute og:
 
 The site explains the product rather than restating the README: the switching problem, what a space
 is, an interactive model of the bubble's badge rules (labelled a simulation), the app's real
-limitations, and links to the four `v0.2.8` release assets. Every screenshot is a real capture from
+limitations, and links to the four `v0.3.0` release assets. Every screenshot is a real capture from
 `docs/`; no store link, licence or signed build is invented. See [website/README.md](website/README.md).
 
 For release signing, copy [keystore.properties.example](keystore.properties.example) to the ignored
